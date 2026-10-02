@@ -117,8 +117,10 @@ summary{cursor:pointer;font-weight:700;color:var(--soft)}
   <p class="hint">Birden fazla resim ve video seçebilirsin. Hikâye boyunca sırayla gösterilirler; sıra dosya adına göredir (ekran görüntülerinde bu, çekilme sırasıdır). Videoların kendi sesi kapatılır, anlatım duyulur.</p>
   <div id="medyaListe" class="row"></div>
   <label for="duzen">Görüntü düzeni</label>
+  <p class="hint">"Tek resim" düzeninde Colab'da karakterle birlikte üretilen sahne resmini 1. bölümde karakter olarak seç; ayrıca sahne seçmen gerekmez.</p>
   <select id="duzen">
-    <option value="karakter">Karakter sahnede anlatır</option>
+    <option value="birlesik">Karakter sahnenin içinde (tek resim, en doğal)</option>
+    <option value="karakter" selected>Karakter ve sahne ayrı resim</option>
     <option value="ekran">Görüntüler tam ekran, karakter köşede anlatır</option>
     <option value="sadece">Sadece görüntüler ve anlatım (karakter yok)</option>
   </select>
@@ -212,18 +214,26 @@ function badge(text, cls){ const b = $('#yuzDurum'); b.textContent = text; b.cla
 $('#fChar').onchange = async e => {
   const f = e.target.files[0]; if(!f) return;
   S.chFile = f;
-  S.ch = await loadImg(f); S.chName = f.name;
+  S.ch = await loadImg(f); S.chOrig = S.ch; S.chName = f.name;
+  // Yatay (sahneli) resim ise "tek resim" düzenine, dikey/şeffaf karakter ise ayrı düzene geç
+  if(S.ch.width > S.ch.height*1.2){ if(LAYOUT !== 'birlesik'){ LAYOUT = 'birlesik'; $('#duzen').value = 'birlesik'; } }
+  else if(LAYOUT === 'birlesik'){ LAYOUT = 'karakter'; $('#duzen').value = 'karakter'; }
   S.pts = {mouth:null, eyeL:null, eyeR:null};
+  S.crop = null;
   const had = loadSaved();
+  if(had && S.pts.mouth){
+    if(S.crop) S.ch = cropImg(S.ch, S.crop); else { autoFrame(); save(); }
+    badge('Yüz hazır (kayıtlı ayarlar)', 'ok'); sampleSkin(); prepComposite(); still(); return;
+  }
   still();
-  if(had && S.pts.mouth){ badge('Yüz hazır (kayıtlı ayarlar)', 'ok'); sampleSkin(); still(); return; }
   badge('Yüz aranıyor...');
   const ok = await detectFace(S.ch);
-  if(ok){ badge('Yüz otomatik bulundu', 'ok'); sampleSkin(); save(); }
+  if(ok){ autoFrame(); badge('Yüz otomatik bulundu', 'ok'); sampleSkin(); save(); }
   else { badge('Yüz bulunamadı, elle işaretle', 'warn'); $('#elle').open = true; }
+  prepComposite();
   still();
 };
-$('#fBg').onchange = async e => { const f = e.target.files[0]; if(!f) return; S.bgFile = f; S.bg = await loadImg(f); still(); };
+$('#fBg').onchange = async e => { const f = e.target.files[0]; if(!f) return; S.bgFile = f; S.bg = await loadImg(f); prepComposite(); still(); };
 $('#fAudio').onchange = e => { S.audioFile = e.target.files[0] || null; };
 
 async function detectFace(img){
@@ -251,6 +261,71 @@ async function detectFace(img){
 }
 
 function setRes(w, h){ W = w; H = h; cv.width = w; cv.height = h; }
+
+/* ===== Karakteri sahneyle kaynaştırma: sahnenin ışık rengi, yumuşak gölge, arka planda odak ===== */
+function avgColor(img){
+  const c = document.createElement('canvas'); c.width = c.height = 8; const g = c.getContext('2d');
+  g.drawImage(img, 0, 0, 8, 8); const d = g.getImageData(0, 0, 8, 8).data; let r = 0, gg = 0, b = 0, n = 0;
+  for(let i = 0; i < d.length; i += 4){ if(d[i+3] < 128) continue; r += d[i]; gg += d[i+1]; b += d[i+2]; n++; }
+  return n ? [r/n, gg/n, b/n] : [128, 128, 128];
+}
+const mixRgb = (css, rgb, k) => { const m = css.match(/\d+/g); if(!m) return css;
+  return `rgb(${(m[0]*(1-k) + rgb[0]*k)|0},${(m[1]*(1-k) + rgb[1]*k)|0},${(m[2]*(1-k) + rgb[2]*k)|0})`; };
+function prepComposite(){
+  S.chT = null; S.shadow = null; S.bgDraw = null; S.skinT = S.skin; S.lipT = S.lip;
+  if(S.bg){
+    try{ const k = Math.min(1, 1600/S.bg.width), c = document.createElement('canvas');
+      c.width = Math.round(S.bg.width*k); c.height = Math.round(S.bg.height*k);
+      const g = c.getContext('2d'); g.filter = 'blur(' + Math.max(1.5, c.width/700) + 'px)';
+      g.drawImage(S.bg, -6, -6, c.width + 12, c.height + 12); S.bgDraw = c; }catch(e){}
+  }
+  if(!S.ch || !S.bg || LAYOUT === 'birlesik') return;
+  try{
+    const amb = avgColor(S.bg), w = S.ch.width, h = S.ch.height;
+    const t = document.createElement('canvas'); t.width = w; t.height = h; const tg = t.getContext('2d');
+    tg.drawImage(S.ch, 0, 0); tg.globalCompositeOperation = 'source-atop';
+    tg.fillStyle = `rgba(${amb[0]|0},${amb[1]|0},${amb[2]|0},.14)`; tg.fillRect(0, 0, w, h);
+    const lg = tg.createLinearGradient(0, 0, w, 0);
+    lg.addColorStop(0, 'rgba(255,240,220,.10)'); lg.addColorStop(.5, 'rgba(255,240,220,0)'); lg.addColorStop(1, 'rgba(0,0,0,.10)');
+    tg.fillStyle = lg; tg.fillRect(0, 0, w, h);
+    S.chT = t;
+    const pad = Math.round(w*.08), sh = document.createElement('canvas'); sh.width = w + pad*2; sh.height = h + pad*2;
+    const sg = sh.getContext('2d'), sil = document.createElement('canvas'); sil.width = w; sil.height = h;
+    const ig = sil.getContext('2d'); ig.drawImage(S.ch, 0, 0); ig.globalCompositeOperation = 'source-in'; ig.fillStyle = '#000'; ig.fillRect(0, 0, w, h);
+    sg.filter = 'blur(' + Math.round(w*.025) + 'px)'; sg.drawImage(sil, pad, pad);
+    S.shadow = { c:sh, pad };
+    S.skinT = mixRgb(S.skin, amb, .14); S.lipT = mixRgb(S.lip, amb, .14);
+  }catch(e){ S.chT = null; S.shadow = null; }
+}
+
+/* Boydan çizilmiş karakteri yüze göre belden yukarı kırpar */
+function cropImg(img, c){
+  const k = document.createElement('canvas'); k.width = Math.round(c.w); k.height = Math.round(c.h);
+  k.getContext('2d').drawImage(img, c.x, c.y, c.w, c.h, 0, 0, k.width, k.height);
+  return k;
+}
+function uncrop(){
+  if(!S.crop || !S.chOrig) return;
+  const c = S.crop, iw = S.chOrig.width, ih = S.chOrig.height, p = S.pts;
+  for(const k in p) if(p[k]) p[k] = { x:(p[k].x*c.w + c.x)/iw, y:(p[k].y*c.h + c.y)/ih };
+  S.mw *= c.w/iw; S.es *= c.w/iw; S.ch = S.chOrig; S.crop = null;
+  $('#rMw').value = S.mw; $('#rEs').value = S.es;
+}
+function autoFrame(){
+  if(LAYOUT === 'birlesik') return;
+  const img = S.ch, iw = img.width, ih = img.height, p = S.pts;
+  if(!p.eyeL || !p.eyeR || !p.mouth) return;
+  const fx = (p.eyeL.x + p.eyeR.x)/2*iw, fy = ((p.eyeL.y + p.eyeR.y)/2*.6 + p.mouth.y*.4)*ih;
+  const ed = Math.hypot((p.eyeR.x - p.eyeL.x)*iw, (p.eyeR.y - p.eyeL.y)*ih); if(ed < 4) return;
+  const top = Math.max(0, fy - ed*3.2), bot = Math.min(ih, fy + ed*7.5);
+  if(bot - top > ih*.85) return;                       // zaten yakın plan
+  const cw = Math.min(iw, (bot - top)*.9), left = Math.max(0, Math.min(iw - cw, fx - cw/2));
+  const c = { x:left, y:top, w:cw, h:bot - top };
+  S.ch = cropImg(img, c); S.crop = c;
+  for(const k in p) if(p[k]) p[k] = { x:(p[k].x*iw - c.x)/c.w, y:(p[k].y*ih - c.y)/c.h };
+  S.mw = Math.min(.2, S.mw*iw/c.w); S.es = Math.min(.1, S.es*iw/c.w);
+  $('#rMw').value = S.mw; $('#rEs').value = S.es;
+}
 
 /* ================= EKRAN GÖRÜNTÜLERİ VE KAYITLARI ================= */
 let MEDIA = [], LAYOUT = 'karakter';
@@ -292,9 +367,13 @@ $('#fMedya').onchange = async e => {
   if(MEDIA.length && LAYOUT === 'karakter'){ LAYOUT = 'ekran'; $('#duzen').value = 'ekran'; }
   say(`${MEDIA.length} görüntü eklendi.`); still();
 };
-$('#duzen').onchange = e => { LAYOUT = e.target.value; still(); };
+$('#duzen').onchange = e => {
+  LAYOUT = e.target.value;
+  if(S.ch){ if(LAYOUT === 'birlesik') uncrop(); else if(!S.crop) autoFrame(); save(); sampleSkin(); }
+  prepComposite(); still();
+};
 function mediaPlan(P){
-  const m = MEDIA.length; if(!m || LAYOUT === 'karakter') return null;
+  const m = MEDIA.length; if(!m || !(LAYOUT === 'ekran' || LAYOUT === 'sadece')) return null;
   const g = AUD.segs, vd = AUD.buf.duration, starts = [];
   if(g.length >= m){ for(let k = 0; k < m; k++) starts.push(g[Math.floor(k*g.length/m)].s); }
   else for(let k = 0; k < m; k++) starts.push(k*vd/m);
@@ -353,6 +432,10 @@ function drawMediaLayer(mi){
   drawMediaOne(MEDIA[mi.k], kb(MEDIA[mi.k]), mi.prev >= 0 ? mi.fade : 1);
 }
 function rect(bob = 0, br = 1){
+  if(LAYOUT === 'birlesik'){
+    const k = Math.max(W/S.ch.width, H/S.ch.height)*1.03*br, w = S.ch.width*k, h = S.ch.height*k;
+    return { x:(W - w)/2, y:(H - h)/2 + bob*.25, w, h };
+  }
   if(LAYOUT === 'ekran' && MEDIA.length){
     const h = H*.62*br, w = h*S.ch.width/S.ch.height;
     return { x: W - w - W*.015, y: H - h + H*.012 + bob, w, h };
@@ -373,7 +456,7 @@ function draw(fr){
           warm = 0, cool = 0, titleA = 0, title = '', black = 0, media = null } = fr;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = '#10202b'; ctx.fillRect(0, 0, W, H);
-  const useMedia = LAYOUT !== 'karakter' && MEDIA.length > 0;
+  const useMedia = (LAYOUT === 'ekran' || LAYOUT === 'sadece') && MEDIA.length > 0;
   if(useMedia) drawMediaLayer(media);
   if(!useMedia && S.ch && zoom > 1.001){
     const F = pt(facePoint(), rect());
@@ -382,9 +465,9 @@ function draw(fr){
     cx = Math.min(W - hw, Math.max(hw, cx)); cy = Math.min(H - hh, Math.max(hh, cy));
     ctx.setTransform(zoom, 0, 0, zoom, W/2 - cx*zoom, H/2 - cy*zoom);
   }
-  if(S.bg && !useMedia){
-    const k = Math.max(W/S.bg.width, H/S.bg.height), bw = S.bg.width*k, bh = S.bg.height*k;
-    ctx.drawImage(S.bg, (W - bw)/2, (H - bh)/2, bw, bh);
+  if(S.bg && !useMedia && LAYOUT !== 'birlesik'){
+    const B = S.bgDraw || S.bg, k = Math.max(W/B.width, H/B.height), bw = B.width*k, bh = B.height*k;
+    ctx.drawImage(B, (W - bw)/2, (H - bh)/2, bw, bh);
   }
   if(LAYOUT === 'sadece' && useMedia){
     /* karakter yok */
@@ -393,10 +476,14 @@ function draw(fr){
     ctx.fillText('Karakter görselini seç', W/2, H/2);
   } else {
     const r = rect(bob, 1 + Math.sin(T*1.8)*.003 + pop);
-    const px = r.x + r.w/2, py = r.y + r.h;
+    const px = r.x + r.w/2, py = r.y + r.h, sep = LAYOUT === 'karakter' || LAYOUT === 'ekran';
     ctx.save();
-    ctx.translate(px, py); ctx.rotate(rot); ctx.translate(-px, -py);
-    ctx.drawImage(S.ch, r.x, r.y, r.w, r.h);
+    if(LAYOUT !== 'birlesik'){ ctx.translate(px, py); ctx.rotate(rot); ctx.translate(-px, -py); }
+    if(sep && S.shadow && !useMedia){
+      const sx = r.w/S.ch.width, pd = S.shadow.pad*sx;
+      ctx.globalAlpha = .38; ctx.drawImage(S.shadow.c, r.x - pd + r.w*.012, r.y - pd + r.h*.006, r.w + pd*2, r.h + pd*2); ctx.globalAlpha = 1;
+    }
+    ctx.drawImage((sep && !useMedia && S.chT) || S.ch, r.x, r.y, r.w, r.h);
     if(S.pts.mouth && o > .06){
       const m = pt(S.pts.mouth, r), mw = r.w*S.mw;
       const rx = mw/2*(.75 + .25*o), ry = Math.max(mw*.38*o, 1.5), cy = m.y + ry*.25;
@@ -413,7 +500,7 @@ function draw(fr){
     if(blink && S.pts.eyeL && S.pts.eyeR){
       for(const k of ['eyeL', 'eyeR']){
         const p = pt(S.pts[k], r), e = r.w*S.es;
-        ctx.beginPath(); ctx.ellipse(p.x, p.y, e, e*.8, 0, 0, Math.PI*2); ctx.fillStyle = S.skin; ctx.fill();
+        ctx.beginPath(); ctx.ellipse(p.x, p.y, e, e*.8, 0, 0, Math.PI*2); ctx.fillStyle = (S.chT && !useMedia && LAYOUT === 'karakter') ? S.skinT : S.skin; ctx.fill();
         ctx.beginPath(); ctx.moveTo(p.x - e*.9, p.y + e*.1); ctx.quadraticCurveTo(p.x, p.y + e*.45, p.x + e*.9, p.y + e*.1);
         ctx.lineWidth = Math.max(2, e*.12); ctx.strokeStyle = '#2b1d1a'; ctx.lineCap = 'round'; ctx.stroke();
       }
@@ -500,7 +587,7 @@ function sampleSkin(){
   }catch(e){}
 }
 function save(){
-  try{ localStorage.setItem('hs_' + S.chName, JSON.stringify({pts:S.pts, scale:S.scale, off:S.off, mw:S.mw, es:S.es, gender:S.gender, age:S.age})); }catch(e){}
+  try{ localStorage.setItem('hs_' + S.chName, JSON.stringify({pts:S.pts, scale:S.scale, off:S.off, mw:S.mw, es:S.es, gender:S.gender, age:S.age, crop:S.crop || null})); }catch(e){}
 }
 function loadSaved(){
   try{
@@ -843,7 +930,7 @@ function director(P){
 function lock(on){ ['#btnRec', '#btnOn', '#btnDinle'].forEach(s => $(s).disabled = on); $('#btnDur').disabled = !on; }
 
 async function prepare(){
-  if(LAYOUT !== 'karakter' && !MEDIA.length) throw new Error('Bu düzen için önce ekran görüntüsü ya da kaydı ekle.');
+  if((LAYOUT === 'ekran' || LAYOUT === 'sadece') && !MEDIA.length) throw new Error('Bu düzen için önce ekran görüntüsü ya da kaydı ekle.');
   if(LAYOUT !== 'sadece'){
     if(!S.ch) throw new Error('Önce karakter görselini seç.');
     if(!S.pts.mouth) throw new Error('Karakterin ağzı bulunamadı. "Yüzü elle düzelt" bölümünden işaretle.');
@@ -856,7 +943,7 @@ async function prepare(){
   say('Miksaj yapılıyor...');
   const master = await mix(lead, $('#muzik').checked);
   const P = { master, lead, title, D: master.duration, w, h,
-           camOn: $('#kamera').checked && LAYOUT === 'karakter', subOn: $('#altyazi').checked };
+           camOn: $('#kamera').checked && (LAYOUT === 'karakter' || LAYOUT === 'birlesik'), subOn: $('#altyazi').checked };
   P.slots = mediaPlan(P);
   return P;
 }
@@ -1044,7 +1131,10 @@ async function restoreJob(job){
   LAYOUT = job.layout || 'karakter'; $('#duzen').value = LAYOUT;
   MEDIA = []; for(const f of (job.media || [])){ try{ MEDIA.push(await loadMedia(f)); }catch(e){} }
   renderMediaList();
+  setTimeout(prepComposite, 0);
+  S.chOrig = S.ch;
   Object.assign(S, job.profile);
+  if(S.crop && S.ch) S.ch = cropImg(S.ch, S.crop);
   if(job.bg){ S.bgFile = job.bg; S.bg = await loadImg(job.bg); } else { S.bgFile = null; S.bg = null; }
   S.audioFile = job.audioFile || null;
   $('#metin').value = job.text; $('#baslik').value = job.title;
@@ -1107,7 +1197,7 @@ async function produce(resumeJob){
               opts:currentOpts(), ch:S.chFile || null, bg:S.bgFile || null, audioFile:S.audioFile || null,
               layout:LAYOUT, media:MEDIA.map(m => m.file),
               profile:{ chName:S.chName, pts:S.pts, scale:S.scale, off:S.off, mw:S.mw, es:S.es,
-                        gender:S.gender, age:S.age, skin:S.skin, lip:S.lip } };
+                        gender:S.gender, age:S.age, skin:S.skin, lip:S.lip, crop:S.crop || null } };
       try{ await saveJob(job); }catch(e){ say('Uyarı: iş kaydedilemedi, yarıda kalırsa baştan başlar.'); }
     }
   }
