@@ -1,0 +1,678 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hikâye Stüdyosu</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#1F3A4D;--panel:#27495F;--line:#3A6178;--text:#F7F3E8;--soft:#B9CBD6;--sun:#FFD166;--coral:#EF6F6C;--ok:#7BD389}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 Nunito,system-ui,sans-serif;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+header{max-width:720px;margin:0 auto;padding:22px 18px 4px}
+h1{font:800 32px/1.1 'Baloo 2',system-ui,sans-serif;margin:0;color:var(--sun)}
+header p{margin:4px 0 0;color:var(--soft)}
+main{max-width:720px;margin:0 auto;padding:4px 14px 48px}
+section{background:var(--panel);border-radius:20px;padding:16px;margin:14px 0;border:1px solid var(--line)}
+h2{font:600 21px/1.2 'Baloo 2',system-ui,sans-serif;margin:0 0 8px;display:flex;gap:10px;align-items:center}
+h2 .n{background:var(--sun);color:var(--bg);width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-size:17px;flex:none}
+label{display:block;font-weight:700;margin:12px 0 4px}
+.hint{color:var(--soft);font-size:14px;margin:4px 0}
+input[type=file]{width:100%;color:var(--soft)}
+textarea,select,input[type=text]{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:12px;padding:10px;font:inherit}
+textarea{min-height:220px;resize:vertical}
+input[type=range]{width:100%;accent-color:var(--sun)}
+button{font:600 16px 'Baloo 2',system-ui,sans-serif;border:0;border-radius:14px;padding:11px 14px;cursor:pointer;background:var(--line);color:var(--text)}
+button.main{background:var(--sun);color:var(--bg);width:100%;font-size:20px;padding:15px;margin-top:12px}
+button.on{background:var(--coral);color:#fff}
+button:disabled{opacity:.45}
+button:focus-visible,select:focus-visible,textarea:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid var(--sun);outline-offset:2px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.row button{flex:1}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+canvas{width:100%;height:auto;border-radius:12px;background:#10202b;display:block;touch-action:none;margin-top:10px}
+#durum{min-height:24px;font-weight:700;margin-top:12px}
+.bar{height:10px;background:var(--bg);border-radius:6px;overflow:hidden;margin-top:6px}
+.bar i{display:block;height:100%;width:0;background:var(--sun)}
+a.indir{display:block;text-align:center;margin-top:12px;background:var(--ok);color:var(--bg);padding:14px;border-radius:14px;font:800 19px 'Baloo 2',system-ui,sans-serif;text-decoration:none}
+.check{display:flex;gap:8px;align-items:center;font-weight:600;margin-top:10px}
+.check input{width:20px;height:20px;accent-color:var(--sun)}
+details{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
+summary{cursor:pointer;font-weight:700;color:var(--soft)}
+.badge{display:inline-block;margin-top:8px;padding:3px 12px;border-radius:999px;font-weight:700;font-size:14px;background:var(--line)}
+.badge.ok{background:var(--ok);color:var(--bg)}
+.badge.warn{background:var(--coral);color:#fff}
+.gizli{display:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>Hikâye Stüdyosu</h1>
+  <p>Karakteri ve sahneyi seç, senaryoyu yapıştır. Gerisini stüdyo halleder.</p>
+</header>
+<main>
+
+<section>
+  <h2><span class="n">1</span>Karakter</h2>
+  <label for="fChar">Karakter görseli (şeffaf PNG)</label>
+  <input id="fChar" type="file" accept="image/*">
+  <div id="yuzDurum" class="badge">Karakter seçilmedi</div>
+  <div class="two">
+    <div>
+      <label for="cinsiyet">Cinsiyet</label>
+      <select id="cinsiyet"><option>Kadın</option><option>Erkek</option></select>
+    </div>
+    <div>
+      <label for="yas">Yaş: <span id="yasYaz">30</span></label>
+      <input id="yas" type="range" min="15" max="65" value="30">
+    </div>
+  </div>
+  <canvas id="cv" width="1280" height="720" aria-label="Önizleme"></canvas>
+  <details id="elle">
+    <summary>Yüzü elle düzelt</summary>
+    <p class="hint">Bir butona dokun, sonra resimde o noktaya dokun.</p>
+    <div class="row">
+      <button data-m="mouth">Ağız</button>
+      <button data-m="eyeL">Sol göz</button>
+      <button data-m="eyeR">Sağ göz</button>
+    </div>
+    <label for="rScale">Karakter boyutu</label>
+    <input id="rScale" type="range" min="0.6" max="1.3" step="0.01" value="1">
+    <label for="rOff">Yatay konum</label>
+    <input id="rOff" type="range" min="-0.35" max="0.35" step="0.005" value="0">
+    <label for="rMw">Ağız genişliği</label>
+    <input id="rMw" type="range" min="0.02" max="0.2" step="0.002" value="0.09">
+    <label for="rEs">Göz boyutu</label>
+    <input id="rEs" type="range" min="0.01" max="0.1" step="0.001" value="0.045">
+    <div class="row">
+      <button id="testMouth">Ağzı dene</button>
+      <button id="testBlink">Göz kırp</button>
+    </div>
+  </details>
+</section>
+
+<section>
+  <h2><span class="n">2</span>Sahne</h2>
+  <label for="fBg">Sahne görseli</label>
+  <input id="fBg" type="file" accept="image/*">
+</section>
+
+<section>
+  <h2><span class="n">3</span>Senaryo</h2>
+  <label for="baslik">Video başlığı (isteğe bağlı, açılışta görünür)</label>
+  <input id="baslik" type="text" placeholder="Hastane koridorunda bir gece">
+  <label for="metin">Karakterin anlatacağı metin</label>
+  <textarea id="metin" placeholder="Merhaba, ben Elif. Size lise yıllarımda başıma gelen bir olayı anlatmak istiyorum..."></textarea>
+  <p class="hint">Paragraflar arasında boş satır bırakırsan anlatıcı orada nefes alır ve kamera yeni plana geçer.</p>
+</section>
+
+<section>
+  <h2><span class="n">4</span>Video</h2>
+  <label for="cozunurluk">Kalite</label>
+  <select id="cozunurluk">
+    <option value="1280x720">720p (önerilen)</option>
+    <option value="1920x1080">1080p (yeni telefonlar için)</option>
+  </select>
+  <label class="check"><input id="kamera" type="checkbox" checked> Otomatik kamera hareketleri</label>
+  <label class="check"><input id="altyazi" type="checkbox" checked> Altyazı</label>
+  <label class="check"><input id="muzik" type="checkbox"> Hafif fon müziği</label>
+
+  <details>
+    <summary>Ses ayarları</summary>
+    <label for="kaynak">Ses kaynağı</label>
+    <select id="kaynak">
+      <option value="ai">Yapay zekâ seslendirsin</option>
+      <option value="dosya">Kendi ses kaydımı kullanacağım</option>
+    </select>
+    <div id="aiBox">
+      <label for="ses">Ses</label>
+      <select id="ses">
+        <option value="auto">Otomatik (karaktere göre)</option>
+        <option value="tr_TR-dfki-medium">DFKI</option>
+        <option value="tr_TR-fahrettin-medium">Fahrettin</option>
+        <option value="tr_TR-fettah-medium">Fettah</option>
+      </select>
+    </div>
+    <div id="fileBox" class="gizli">
+      <label for="fAudio">Ses kaydı</label>
+      <input id="fAudio" type="file" accept="audio/*">
+      <p class="hint">Kendi kaydında ses tonunu "Otomatik" kapatıp 1.00 yapmanı öneririm.</p>
+    </div>
+    <label class="check"><input id="tonAuto" type="checkbox" checked> Ses tonunu yaşa ve cinsiyete göre ayarla</label>
+    <label for="rTon">Ses tonu: <span id="tonYaz">1.00</span></label>
+    <input id="rTon" type="range" min="0.85" max="1.5" step="0.01" value="1" disabled>
+    <button id="btnDinle" class="main" style="background:var(--line);color:var(--text)">Sesi dinle</button>
+    <p class="hint">İlk kullanımda ses modeli bir kez indirilir (yaklaşık 60 MB), sonra telefonda kalır.</p>
+  </details>
+
+  <div class="row">
+    <button id="btnOn">Önizle</button>
+    <button id="btnDur" disabled>Durdur</button>
+  </div>
+  <button id="btnRec" class="main">Videoyu oluştur</button>
+  <p class="hint">Kayıt, video süresi kadar sürer. Bu sırada ekranı kapatma ve başka uygulamaya geçme.</p>
+  <div id="durum" role="status"></div>
+  <div class="bar"><i id="bar"></i></div>
+  <div id="sonuc"></div>
+</section>
+
+</main>
+<script type="module">
+const $ = s => document.querySelector(s);
+const cv = $('#cv'), ctx = cv.getContext('2d');
+const FPS = 30;
+let W = 1280, H = 720;
+const S = { bg:null, ch:null, chName:'', pts:{mouth:null, eyeL:null, eyeR:null},
+            scale:1, off:0, mw:.09, es:.045, skin:'#e8b796', lip:'#a85a55', gender:'Kadın', age:30 };
+let mark = null, running = false, AUD = null, TTS = null, AC = null, FL = null, hidden = false;
+
+const say = t => $('#durum').textContent = t;
+const bar = f => $('#bar').style.width = (Math.max(0, Math.min(1, f))*100).toFixed(1) + '%';
+const ac = () => AC || (AC = new (window.AudioContext || window.webkitAudioContext)());
+const tick = () => new Promise(r => setTimeout(r, 0));
+const lerp = (a, b, k) => a + (b - a)*k;
+const ease = k => k < 0 ? 0 : k > 1 ? 1 : k*k*(3 - 2*k);
+
+/* ================= KARAKTER ================= */
+function loadImg(file){
+  return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(file); });
+}
+function badge(text, cls){ const b = $('#yuzDurum'); b.textContent = text; b.className = 'badge ' + (cls || ''); }
+
+$('#fChar').onchange = async e => {
+  const f = e.target.files[0]; if(!f) return;
+  S.ch = await loadImg(f); S.chName = f.name;
+  S.pts = {mouth:null, eyeL:null, eyeR:null};
+  const had = loadSaved();
+  still();
+  if(had && S.pts.mouth){ badge('Yüz hazır (kayıtlı ayarlar)', 'ok'); sampleSkin(); still(); return; }
+  badge('Yüz aranıyor...');
+  const ok = await detectFace(S.ch);
+  if(ok){ badge('Yüz otomatik bulundu', 'ok'); sampleSkin(); save(); }
+  else { badge('Yüz bulunamadı, elle işaretle', 'warn'); $('#elle').open = true; }
+  still();
+};
+$('#fBg').onchange = async e => { const f = e.target.files[0]; if(!f) return; S.bg = await loadImg(f); still(); };
+
+async function detectFace(img){
+  try{
+    if(!FL){
+      const V = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs');
+      const fs = await V.FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm');
+      FL = await V.FaceLandmarker.createFromOptions(fs, {
+        baseOptions:{ modelAssetPath:'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task' },
+        runningMode:'IMAGE', numFaces:1 });
+    }
+    const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+    const g = c.getContext('2d'); g.fillStyle = '#b8b8b8'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0);
+    const res = FL.detect(c), L = res.faceLandmarks && res.faceLandmarks[0];
+    if(!L) return false;
+    const avg = ids => ({ x: ids.reduce((s, i) => s + L[i].x, 0)/ids.length, y: ids.reduce((s, i) => s + L[i].y, 0)/ids.length });
+    S.pts.mouth = avg([13, 14]);
+    S.pts.eyeL = avg([33, 133, 159, 145]);
+    S.pts.eyeR = avg([362, 263, 386, 374]);
+    S.mw = Math.abs(L[61].x - L[291].x)*.85;
+    S.es = Math.max(Math.abs(L[33].x - L[133].x), Math.abs(L[362].x - L[263].x))*.62;
+    $('#rMw').value = S.mw; $('#rEs').value = S.es;
+    return true;
+  }catch(err){ console.warn(err); return false; }
+}
+
+function setRes(w, h){ W = w; H = h; cv.width = w; cv.height = h; }
+function rect(bob = 0, br = 1){
+  const h = H*.92*S.scale*br, w = h*S.ch.width/S.ch.height;
+  return { x: W/2 - w/2 + S.off*W, y: H - h + H*.012 + bob, w, h };
+}
+const pt = (p, r) => ({ x: r.x + p.x*r.w, y: r.y + p.y*r.h });
+function facePoint(){
+  const P = [S.pts.eyeL, S.pts.eyeR, S.pts.mouth].filter(Boolean);
+  if(!P.length) return {x:.5, y:.3};
+  return { x: P.reduce((s, p) => s + p.x, 0)/P.length, y: P.reduce((s, p) => s + p.y, 0)/P.length };
+}
+
+/* ================= ÇİZİM ================= */
+function draw(fr){
+  const { T = 0, o = 0, blink = false, sub = '', marks = false, zoom = 1, bob = 0, rot = 0, pop = 0,
+          warm = 0, cool = 0, titleA = 0, title = '', black = 0 } = fr;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#10202b'; ctx.fillRect(0, 0, W, H);
+  if(S.ch && zoom > 1.001){
+    const F = pt(facePoint(), rect());
+    let cx = lerp(W/2, F.x, .85), cy = lerp(H/2, F.y, .85);
+    const hw = W/(2*zoom), hh = H/(2*zoom);
+    cx = Math.min(W - hw, Math.max(hw, cx)); cy = Math.min(H - hh, Math.max(hh, cy));
+    ctx.setTransform(zoom, 0, 0, zoom, W/2 - cx*zoom, H/2 - cy*zoom);
+  }
+  if(S.bg){
+    const k = Math.max(W/S.bg.width, H/S.bg.height), bw = S.bg.width*k, bh = S.bg.height*k;
+    ctx.drawImage(S.bg, (W - bw)/2, (H - bh)/2, bw, bh);
+  }
+  if(!S.ch){
+    ctx.fillStyle = '#B9CBD6'; ctx.font = `600 ${H*.045}px Nunito, sans-serif`; ctx.textAlign = 'center';
+    ctx.fillText('Karakter görselini seç', W/2, H/2);
+  } else {
+    const r = rect(bob, 1 + Math.sin(T*1.8)*.003 + pop);
+    const px = r.x + r.w/2, py = r.y + r.h;
+    ctx.save();
+    ctx.translate(px, py); ctx.rotate(rot); ctx.translate(-px, -py);
+    ctx.drawImage(S.ch, r.x, r.y, r.w, r.h);
+    if(S.pts.mouth && o > .06){
+      const m = pt(S.pts.mouth, r), mw = r.w*S.mw;
+      const rx = mw/2*(.75 + .25*o), ry = Math.max(mw*.38*o, 1.5), cy = m.y + ry*.25;
+      ctx.save();
+      ctx.beginPath(); ctx.ellipse(m.x, cy, rx, ry, 0, 0, Math.PI*2);
+      ctx.fillStyle = '#4a1a1e'; ctx.fill(); ctx.clip();
+      ctx.beginPath(); ctx.ellipse(m.x, cy + ry*.75, rx*.6, ry*.5, 0, 0, Math.PI*2);
+      ctx.fillStyle = '#c9566a'; ctx.fill();
+      ctx.fillStyle = '#fffaf2'; ctx.fillRect(m.x - rx, cy - ry, rx*2, ry*.3);
+      ctx.restore();
+      ctx.beginPath(); ctx.ellipse(m.x, cy, rx, ry, 0, 0, Math.PI*2);
+      ctx.lineWidth = Math.max(1.5, mw*.05); ctx.strokeStyle = S.lip; ctx.stroke();
+    }
+    if(blink && S.pts.eyeL && S.pts.eyeR){
+      for(const k of ['eyeL', 'eyeR']){
+        const p = pt(S.pts[k], r), e = r.w*S.es;
+        ctx.beginPath(); ctx.ellipse(p.x, p.y, e, e*.8, 0, 0, Math.PI*2); ctx.fillStyle = S.skin; ctx.fill();
+        ctx.beginPath(); ctx.moveTo(p.x - e*.9, p.y + e*.1); ctx.quadraticCurveTo(p.x, p.y + e*.45, p.x + e*.9, p.y + e*.1);
+        ctx.lineWidth = Math.max(2, e*.12); ctx.strokeStyle = '#2b1d1a'; ctx.lineCap = 'round'; ctx.stroke();
+      }
+    }
+    if(marks){
+      const lab = {mouth:'Ağız', eyeL:'Sol göz', eyeR:'Sağ göz'};
+      for(const k in S.pts){ if(!S.pts[k]) continue;
+        const p = pt(S.pts[k], r), rad = k === 'mouth' ? r.w*S.mw/2 : r.w*S.es;
+        ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, Math.PI*2);
+        ctx.lineWidth = 3; ctx.strokeStyle = '#FFD166'; ctx.stroke();
+        ctx.fillStyle = '#FFD166'; ctx.font = `700 ${H*.028}px Nunito, sans-serif`; ctx.textAlign = 'center';
+        ctx.fillText(lab[k], p.x, p.y - rad - 6);
+      }
+    }
+    ctx.restore();
+  }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if(warm > .01){ ctx.fillStyle = `rgba(255,170,80,${.08*warm})`; ctx.fillRect(0, 0, W, H); }
+  if(cool > .01){ ctx.fillStyle = `rgba(50,80,150,${.14*cool})`; ctx.fillRect(0, 0, W, H); }
+  if(!marks){
+    const g = ctx.createRadialGradient(W/2, H/2, H*.35, W/2, H/2, W*.62);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, `rgba(0,0,0,${.3 + .2*cool})`);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+  if(sub) subtitle(sub);
+  if(titleA > .01 && title) titleCard(title, titleA);
+  if(black > .01){ ctx.fillStyle = `rgba(0,0,0,${Math.min(1, black)})`; ctx.fillRect(0, 0, W, H); }
+}
+function wrap(text, maxW){
+  const words = text.split(/\s+/), lines = []; let cur = '';
+  for(const w of words){ const t = cur ? cur + ' ' + w : w; if(ctx.measureText(t).width > maxW && cur){ lines.push(cur); cur = w; } else cur = t; }
+  if(cur) lines.push(cur); return lines;
+}
+function subtitle(text){
+  const fs = H*.042; ctx.font = `700 ${fs}px Nunito, sans-serif`; ctx.textAlign = 'center';
+  const L = wrap(text, W*.8).slice(-3), lh = fs*1.25, bh = L.length*lh + fs*.6, by = H - bh - H*.05;
+  const bw = Math.min(W*.88, Math.max(...L.map(l => ctx.measureText(l).width)) + fs*1.4);
+  ctx.fillStyle = 'rgba(0,0,0,.6)';
+  ctx.beginPath(); ctx.roundRect ? ctx.roundRect(W/2 - bw/2, by, bw, bh, fs*.4) : ctx.rect(W/2 - bw/2, by, bw, bh); ctx.fill();
+  ctx.fillStyle = '#fff';
+  L.forEach((l, i) => ctx.fillText(l, W/2, by + fs*.3 + lh*(i + .8)));
+}
+function titleCard(title, a){
+  ctx.fillStyle = `rgba(16,32,43,${.72*a})`; ctx.fillRect(0, 0, W, H);
+  const fs = H*.085; ctx.font = `800 ${fs}px 'Baloo 2', sans-serif`; ctx.textAlign = 'center';
+  const L = wrap(title, W*.8), lh = fs*1.1, y0 = H/2 - (L.length - 1)*lh/2 + fs*.3;
+  ctx.fillStyle = `rgba(255,209,102,${a})`;
+  L.forEach((l, i) => ctx.fillText(l, W/2, y0 + i*lh));
+}
+const still = () => { if(!running) draw({ marks: $('#elle').open }); };
+$('#elle').addEventListener('toggle', still);
+
+/* ================= ELLE DÜZELTME ================= */
+document.querySelectorAll('[data-m]').forEach(b => b.onclick = () => {
+  mark = b.dataset.m;
+  document.querySelectorAll('[data-m]').forEach(x => x.classList.toggle('on', x === b));
+  say('Şimdi resimde ' + b.textContent.toLowerCase() + ' noktasına dokun.');
+});
+cv.addEventListener('pointerdown', e => {
+  if(!mark || !S.ch || running) return;
+  const b = cv.getBoundingClientRect(), x = (e.clientX - b.left)/b.width*W, y = (e.clientY - b.top)/b.height*H;
+  const r = rect();
+  S.pts[mark] = { x:(x - r.x)/r.w, y:(y - r.y)/r.h };
+  mark = null; document.querySelectorAll('[data-m]').forEach(x => x.classList.remove('on'));
+  sampleSkin(); save(); still(); say('İşaretlendi.');
+  if(S.pts.mouth) badge('Yüz hazır', 'ok');
+});
+for(const [id, key] of [['rScale','scale'], ['rOff','off'], ['rMw','mw'], ['rEs','es']]){
+  $('#' + id).oninput = e => { S[key] = +e.target.value; save(); still(); };
+}
+$('#cinsiyet').onchange = e => { S.gender = e.target.value; save(); updTon(); };
+$('#yas').oninput = e => { S.age = +e.target.value; $('#yasYaz').textContent = S.age; save(); updTon(); };
+function sampleSkin(){
+  const {eyeL, mouth} = S.pts; if(!S.ch || !eyeL || !mouth) return;
+  try{
+    const c = document.createElement('canvas'); c.width = S.ch.width; c.height = S.ch.height;
+    const g = c.getContext('2d'); g.drawImage(S.ch, 0, 0);
+    const x = Math.round(eyeL.x*c.width), y = Math.round((eyeL.y + (mouth.y - eyeL.y)*.5)*c.height);
+    const d = g.getImageData(x - 3, y - 3, 7, 7).data; let R = 0, G = 0, B = 0, n = 0;
+    for(let i = 0; i < d.length; i += 4){ if(d[i+3] < 200) continue; R += d[i]; G += d[i+1]; B += d[i+2]; n++; }
+    if(!n) return; R /= n; G /= n; B /= n;
+    S.skin = `rgb(${R|0},${G|0},${B|0})`;
+    S.lip = `rgb(${(R*.72)|0},${(G*.5)|0},${(B*.5)|0})`;
+  }catch(e){}
+}
+function save(){
+  try{ localStorage.setItem('hs_' + S.chName, JSON.stringify({pts:S.pts, scale:S.scale, off:S.off, mw:S.mw, es:S.es, gender:S.gender, age:S.age})); }catch(e){}
+}
+function loadSaved(){
+  try{
+    const d = JSON.parse(localStorage.getItem('hs_' + S.chName) || 'null'); if(!d) return false;
+    Object.assign(S, d);
+    $('#rScale').value = S.scale; $('#rOff').value = S.off; $('#rMw').value = S.mw; $('#rEs').value = S.es;
+    $('#cinsiyet').value = S.gender; $('#yas').value = S.age; $('#yasYaz').textContent = S.age; updTon();
+    return true;
+  }catch(e){ return false; }
+}
+$('#testMouth').onclick = () => {
+  if(!S.pts.mouth) return say('Önce ağzı işaretle.');
+  const t0 = performance.now();
+  (function f(){ const t = (performance.now() - t0)/1000;
+    draw({ T:t, o:Math.abs(Math.sin(t*9))*.9 });
+    if(t < 1.6) requestAnimationFrame(f); else still(); })();
+};
+$('#testBlink').onclick = () => {
+  if(!S.pts.eyeL || !S.pts.eyeR) return say('Önce iki gözü de işaretle.');
+  draw({ blink:true }); setTimeout(still, 300);
+};
+
+/* ================= SENARYO ANALİZİ ================= */
+const LEX = {
+  uzgun: ['ağla','gözyaş','üzgün','üzül','hüzün','acı','öldü','ölüm','vefat','kaybett','kaybı','yalnız','hastane','hasta','korku','kork','pişman','kırıl','keder','yas ','özle','veda','ayrıl','yıkıl','çaresiz','umutsuz','dert','sancı','yaralı','gitti artık','mezar'],
+  mutlu: ['mutlu','sevin','güldü','gülüm','gülerek','harika','başard','kazand','sevgi','umut','teşekkür','neşe','kahkaha','huzur','iyi ki','şükür','muhteşem','çok güzel','sarıld'],
+  saskin: ['birden','aniden','inanama','şaşır','şok','meğer','hayret','bir anda','ne göreyim','donup'],
+  dusunceli: ['hatırl','düşün','belki','acaba','yıllar önce','o zamanlar','çocukken','bilmiyorum','merak']
+};
+function moodOf(s){
+  const t = s.toLocaleLowerCase('tr'); let best = 'notr', bs = 0;
+  for(const m in LEX){
+    let sc = 0; for(const w of LEX[m]) if(t.includes(w)) sc++;
+    if(m === 'saskin' && /!/.test(s)) sc += .6;
+    if(sc > bs){ bs = sc; best = m; }
+  }
+  return best;
+}
+function sentences(t){
+  return t.split(/\n+/)
+    .flatMap(p => p.match(/[^.!?…]+(?:\.\.\.|[.!?…])*["'”’]?\s*/g) || [])
+    .map(s => s.trim()).filter(Boolean)
+    .flatMap(s => s.length > 220 ? s.split(/(?<=,)\s+/) : [s]);
+}
+function parseScript(t){
+  const out = [];
+  t.replace(/\r/g, '').split(/\n\s*\n/).forEach((par, pi) => {
+    const ss = sentences(par);
+    ss.forEach((s, k) => out.push({ text:s, paraStart: k === 0 && pi > 0, paraEnd: k === ss.length - 1 }));
+  });
+  return out;
+}
+function direct(segs){
+  let prev = 'notr', carry = 0, n = 0;
+  const Z = { genis:1, orta:1.15, yakin:1.32 }, cycle = ['genis', 'orta', 'yakin', 'orta'];
+  segs.forEach((g, i) => {
+    let m = moodOf(g.text);
+    if(m === 'notr' && prev !== 'notr' && carry < 2){ m = prev; carry++; } else carry = 0;
+    g.mood = m; prev = m;
+    if(i === 0 || g.paraStart){ g.shot = 'genis'; g.cut = i > 0; n = 0; }
+    else if(m === 'uzgun' || m === 'saskin'){ g.shot = 'yakin'; g.cut = false; }
+    else { n++; g.shot = cycle[Math.floor(n/2) % cycle.length]; g.cut = false; }
+    g.zoom = Z[g.shot];
+  });
+  return segs;
+}
+
+/* ================= SES ================= */
+$('#kaynak').onchange = e => {
+  $('#aiBox').classList.toggle('gizli', e.target.value !== 'ai');
+  $('#fileBox').classList.toggle('gizli', e.target.value === 'ai');
+};
+$('#tonAuto').onchange = () => { $('#rTon').disabled = $('#tonAuto').checked; updTon(); };
+$('#rTon').oninput = () => $('#tonYaz').textContent = (+$('#rTon').value).toFixed(2);
+function autoPitch(){
+  const a = S.age;
+  if(S.gender === 'Kadın') return a < 20 ? 1.42 : a < 35 ? 1.36 : a < 50 ? 1.32 : 1.27;
+  return a < 20 ? 1.12 : a < 35 ? 1.04 : a < 50 ? 1.0 : 0.94;
+}
+function updTon(){
+  if($('#tonAuto').checked){ $('#rTon').value = autoPitch(); }
+  $('#tonYaz').textContent = (+$('#rTon').value).toFixed(2);
+}
+const pitch = () => +$('#rTon').value;
+function voiceId(){
+  const v = $('#ses').value; if(v !== 'auto') return v;
+  if(S.gender === 'Kadın') return 'tr_TR-dfki-medium';
+  return S.age >= 50 ? 'tr_TR-fettah-medium' : 'tr_TR-fahrettin-medium';
+}
+async function loadTTS(){
+  if(!TTS) TTS = await import('https://cdn.jsdelivr.net/npm/@diffusionstudio/vits-web@1.0.3/+esm');
+  return TTS;
+}
+async function synth(text){
+  const tts = await loadTTS();
+  const wav = await tts.predict({ text, voiceId: voiceId() }, p => {
+    if(p && p.total) say(`Ses modeli indiriliyor (yalnızca ilk sefer): %${Math.round(p.loaded/p.total*100)}`);
+  });
+  return ac().decodeAudioData(await wav.arrayBuffer());
+}
+/* Konuşma hızını bozmadan ses tonunu değiştirir (WSOLA + yeniden örnekleme) */
+async function pitchShift(buf, p){
+  if(Math.abs(p - 1) < .01) return buf;
+  const x = buf.getChannelData(0), sr = buf.sampleRate, N = 1024, Hs = 512, Ha = Hs/p, tol = 192;
+  const outLen = Math.ceil(x.length*p) + N, y = new Float32Array(outLen), ws = new Float32Array(outLen), win = new Float32Array(N);
+  for(let i = 0; i < N; i++) win[i] = .5 - .5*Math.cos(2*Math.PI*i/N);
+  let prevPos = 0;
+  for(let k = 0, outPos = 0; ; k++, outPos += Hs){
+    const nominal = Math.round(k*Ha); if(nominal + N >= x.length || outPos + N >= outLen) break;
+    let best = nominal;
+    const nat = prevPos + Hs;
+    if(k > 0 && nat + N/2 < x.length){
+      let bc = -Infinity;
+      for(let d = -tol; d <= tol; d += 4){
+        const c0 = nominal + d; if(c0 < 0 || c0 + N >= x.length) continue;
+        let c = 0; for(let j = 0; j < N/2; j += 4) c += x[c0 + j]*x[nat + j];
+        if(c > bc){ bc = c; best = c0; }
+      }
+    }
+    for(let j = 0; j < N; j++){ y[outPos + j] += x[best + j]*win[j]; ws[outPos + j] += win[j]; }
+    prevPos = best;
+    if(k % 1500 === 0) await tick();
+  }
+  for(let i = 0; i < outLen; i++) if(ws[i] > 1e-3) y[i] /= ws[i];
+  const tmp = new AudioBuffer({ length:outLen, sampleRate:sr, numberOfChannels:1 }); tmp.copyToChannel(y, 0);
+  const off = new OfflineAudioContext(1, Math.ceil(x.length), sr);
+  const s = off.createBufferSource(); s.buffer = tmp; s.playbackRate.value = p; s.connect(off.destination); s.start();
+  return off.startRendering();
+}
+function envelope(buf){
+  const d = buf.getChannelData(0), sr = buf.sampleRate, n = Math.ceil(buf.duration*FPS), win = Math.floor(sr/FPS);
+  const env = new Float32Array(n);
+  for(let i = 0; i < n; i++){ let s = 0; const st = i*win; for(let j = 0; j < win; j++){ const v = d[st + j] || 0; s += v*v; } env[i] = Math.sqrt(s/win); }
+  const sorted = Array.from(env).sort((a, b) => a - b), p = sorted[Math.floor(n*.95)] || 1;
+  let prev = 0;
+  for(let i = 0; i < n; i++){ let v = Math.min(1, env[i]/p); v = v < .12 ? 0 : (v - .12)/.88; v = prev*.35 + v*.65; prev = v; env[i] = v; }
+  return env;
+}
+function voiceKey(){
+  const f = $('#fAudio').files[0];
+  return [$('#kaynak').value, $('#metin').value, voiceId(), pitch().toFixed(2), f ? f.name + f.size : ''].join('|');
+}
+async function ensureVoice(){
+  const key = voiceKey();
+  if(AUD && AUD.key === key) return;
+  const a = ac(), text = $('#metin').value.trim();
+  const segs = text ? direct(parseScript(text)) : [];
+  let buf;
+  if($('#kaynak').value === 'dosya'){
+    const f = $('#fAudio').files[0]; if(!f) throw new Error('Ses ayarlarından bir ses kaydı seç.');
+    say('Ses kaydı okunuyor...');
+    buf = await a.decodeAudioData(await f.arrayBuffer());
+    const total = segs.reduce((n, g) => n + g.text.length, 0) || 1; let acc = 0;
+    segs.forEach(g => { g.s = acc/total*buf.duration; acc += g.text.length; g.e = acc/total*buf.duration; });
+  } else {
+    if(!segs.length) throw new Error('Önce senaryo metnini yaz.');
+    say('Ses motoru yükleniyor...');
+    const bufs = [];
+    for(let i = 0; i < segs.length; i++){
+      say(`Seslendiriliyor: ${i + 1} / ${segs.length}`); bar(i/segs.length);
+      bufs.push(await synth(segs[i].text));
+    }
+    const sr = bufs[0].sampleRate;
+    const gaps = segs.map(g => g.paraEnd ? .9 : /(\.\.\.|…)$/.test(g.text) ? .7 : /\?$/.test(g.text) ? .5 : .35);
+    const len = bufs.reduce((n, b, i) => n + b.length + Math.round(gaps[i]*sr), 0);
+    buf = a.createBuffer(1, len, sr); let pos = 0;
+    bufs.forEach((b, i) => { buf.getChannelData(0).set(b.getChannelData(0), pos);
+      segs[i].s = pos/sr; segs[i].e = (pos + b.length)/sr; pos += b.length + Math.round(gaps[i]*sr); });
+  }
+  say('Ses tonu ayarlanıyor...');
+  buf = await pitchShift(buf, pitch());
+  const count = m => segs.filter(g => g.mood === m).length;
+  AUD = { key, buf, segs, env:envelope(buf), mainMood: count('uzgun') > count('mutlu') ? 'uzgun' : 'mutlu' };
+}
+$('#btnDinle').onclick = async () => {
+  const b = $('#btnDinle'); b.disabled = true;
+  try{
+    const first = sentences($('#metin').value.trim())[0] || 'Merhaba, size başımdan geçen bir olayı anlatmak istiyorum.';
+    say('Deneme sesi hazırlanıyor...');
+    let buf;
+    if($('#kaynak').value === 'dosya'){
+      const f = $('#fAudio').files[0]; if(!f) throw new Error('Önce bir ses kaydı seç.');
+      buf = await ac().decodeAudioData(await f.arrayBuffer());
+    } else buf = await synth(first);
+    buf = await pitchShift(buf, pitch());
+    const a = ac(); await a.resume(); const s = a.createBufferSource(); s.buffer = buf; s.connect(a.destination); s.start();
+    say('Çalıyor: ' + ($('#kaynak').value === 'dosya' ? 'ses kaydın' : voiceId()));
+  }catch(e){ say('Ses çalınamadı: ' + (e.message || e)); }
+  b.disabled = false;
+};
+
+/* ================= MÜZİK VE MİKSAJ ================= */
+function addMusic(c, D, mood){
+  const prog = mood === 'uzgun' ? [[57,60,64],[53,57,60],[48,52,55],[55,59,62]] : [[48,52,55],[55,59,62],[57,60,64],[53,57,60]];
+  const m = c.createGain(), lp = c.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.value = 900; lp.connect(m); m.connect(c.destination);
+  m.gain.setValueAtTime(.045, 0); m.gain.setValueAtTime(.045, Math.max(0, D - 3)); m.gain.linearRampToValueAtTime(0, D);
+  const L = 4;
+  for(let t = 0, i = 0; t < D; t += L, i++){
+    for(const n of prog[i % 4]){
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = 'triangle'; o.frequency.value = 440*Math.pow(2, (n - 69)/12);
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.33, t + 1.2);
+      g.gain.setValueAtTime(.33, t + L - .6); g.gain.linearRampToValueAtTime(0, t + L + .4);
+      o.connect(g); g.connect(lp); o.start(t); o.stop(t + L + .5);
+    }
+  }
+}
+async function mix(lead, music){
+  const v = AUD.buf, sr = v.sampleRate, D = lead + v.duration + 1.5;
+  const c = new OfflineAudioContext(1, Math.ceil(D*sr), sr);
+  const s = c.createBufferSource(); s.buffer = v; s.connect(c.destination); s.start(lead);
+  if(music) addMusic(c, D, AUD.mainMood);
+  return c.startRendering();
+}
+
+/* ================= YÖNETMEN (hareket ve kamera) ================= */
+function segAt(t){
+  const g = AUD.segs; if(!g.length) return -1;
+  let i = -1; for(let k = 0; k < g.length; k++){ if(g[k].s <= t) i = k; else break; }
+  return i;
+}
+function camZoom(t, i){
+  const g = AUD.segs; if(i < 0) return 1;
+  const cur = g[i], prev = i > 0 ? g[i - 1].zoom : 1;
+  const k = cur.cut ? 1 : ease((t - cur.s)/.9);
+  return lerp(prev, cur.zoom, k) + Math.min(.035, Math.max(0, t - cur.s)*.006);
+}
+function blinkPlan(D){ const a = []; let t = 1.2; while(t < D){ a.push(t); t += 2.5 + Math.random()*2.5; } return a; }
+const isBlink = (t, a) => a.some(b => t >= b && t < b + .14);
+function pickMime(){
+  if(!window.MediaRecorder) return null;
+  for(const m of ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'])
+    if(MediaRecorder.isTypeSupported(m)) return m;
+  return '';
+}
+document.addEventListener('visibilitychange', () => { if(document.hidden && running) hidden = true; });
+function lock(on){ ['#btnRec', '#btnOn', '#btnDinle'].forEach(s => $(s).disabled = on); $('#btnDur').disabled = !on; }
+
+async function run(record){
+  if(!S.ch) return say('Önce karakter görselini seç.');
+  if(!S.pts.mouth) return say('Karakterin ağzı bulunamadı. "Yüzü elle düzelt" bölümünden işaretle.');
+  if(record && pickMime() === null) return say('Bu tarayıcı video kaydını desteklemiyor. Chrome ile aç.');
+  lock(true); $('#sonuc').innerHTML = ''; running = true; hidden = false;
+  try{ await ensureVoice(); }
+  catch(e){ say('Ses oluşturulamadı: ' + (e.message || e) + '. İnternetini kontrol et ya da ses ayarlarından kendi kaydını kullan.'); running = false; lock(false); return; }
+  if(!running){ lock(false); say('Durduruldu.'); return; }
+
+  const [w, h] = $('#cozunurluk').value.split('x').map(Number);
+  if(cv.width !== w) setRes(w, h);
+  const title = $('#baslik').value.trim(), lead = title ? 3.2 : .6;
+  const camOn = $('#kamera').checked, subOn = $('#altyazi').checked;
+  say('Miksaj yapılıyor...');
+  const master = await mix(lead, $('#muzik').checked);
+  const a = ac(); await a.resume();
+  const src = a.createBufferSource(); src.buffer = master; src.connect(a.destination);
+  let rec, chunks = [], wl = null;
+  if(record){
+    const dest = a.createMediaStreamDestination(); src.connect(dest);
+    const stream = new MediaStream([...cv.captureStream(FPS).getVideoTracks(), ...dest.stream.getAudioTracks()]);
+    const mime = pickMime();
+    rec = new MediaRecorder(stream, { ...(mime ? {mimeType:mime} : {}), videoBitsPerSecond: w >= 1920 ? 8e6 : 5e6 });
+    rec.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
+    rec.start(1000);
+    try{ wl = await navigator.wakeLock?.request('screen'); }catch(e){}
+    say('Video kaydediliyor... ekranı açık tut.');
+  } else say('Önizleme oynatılıyor.');
+
+  const D = master.duration, vd = AUD.buf.duration, blinks = blinkPlan(D);
+  const M = { uzgun:0, mutlu:0, saskin:0, dusunceli:0 };
+  const t0 = a.currentTime + .15; src.start(t0);
+  await new Promise(done => {
+    (function loop(){
+      const T = a.currentTime - t0, t = T - lead, f = Math.floor(t*FPS);
+      const o = t >= 0 && f < AUD.env.length ? AUD.env[f] : 0;
+      const i = t >= 0 ? segAt(t) : -1, g = i >= 0 ? AUD.segs[i] : null;
+      const target = g ? g.mood : 'notr';
+      for(const k in M) M[k] += ((target === k ? 1 : 0) - M[k])*.035;
+      let nod = 0;
+      if(g && t > g.e && t < g.e + .45) nod = Math.sin(Math.PI*(t - g.e)/.45);
+      const segT = g ? t - g.s : 9;
+      const pop = M.saskin*Math.max(0, 1 - segT/.4)*.015;
+      const bob = Math.sin(T*1.3*(1 - .4*M.uzgun + .3*M.mutlu))*H*.004 - o*H*.003 + H*.008*M.uzgun + H*.006*nod;
+      const rot = (Math.sin(T*.37)*.4 - 1.8*M.dusunceli + Math.sin(T*.9)*.8*M.mutlu + .6*nod) * Math.PI/180;
+      const sub = subOn && g && t < g.e + .3 ? g.text : '';
+      const titleA = title ? 1 - ease((T - (lead - .9))/.7) : 0;
+      const black = Math.max(1 - T/.5, (T - (D - 1))/1, 0);
+      draw({ T, o, blink:isBlink(T, blinks), sub, zoom: camOn ? camZoom(Math.max(t, 0), i) : 1,
+             bob, rot, pop, warm:M.mutlu, cool:M.uzgun, titleA, title, black });
+      bar(T/D);
+      if(T < D && running) requestAnimationFrame(loop); else done();
+    })();
+  });
+  try{ src.stop(); }catch(e){}
+  const finished = running;
+  if(record){
+    await new Promise(r => { rec.onstop = r; rec.stop(); });
+    try{ wl && wl.release(); }catch(e){}
+    const type = rec.mimeType || 'video/webm', ext = type.includes('mp4') ? 'mp4' : 'webm';
+    const url = URL.createObjectURL(new Blob(chunks, {type}));
+    const ad = (title || S.chName.replace(/\.[^.]+$/, '') || 'hikaye').replace(/[^\wçğıöşüÇĞİÖŞÜ -]/g, '').trim().replace(/\s+/g, '_') + '.' + ext;
+    $('#sonuc').innerHTML = `<a class="indir" href="${url}" download="${ad}">Videoyu indir (${ext.toUpperCase()}, ${Math.round(vd/60*10)/10} dk)</a>`;
+    say(hidden ? 'Kayıt bitti ama ekran bir ara kapandı ya da uygulama değişti; videoda donma olabilir, kontrol et.' :
+        finished ? 'Video hazır. İndirip YouTube\'a yükleyebilirsin.' : 'Kayıt durduruldu. Kaydedilen kısmı indirebilirsin.');
+  } else say(finished ? 'Önizleme bitti.' : 'Durduruldu.');
+  running = false; lock(false); still();
+}
+$('#btnOn').onclick = () => run(false);
+$('#btnRec').onclick = () => run(true);
+$('#btnDur').onclick = () => { running = false; };
+$('#cozunurluk').onchange = e => { const [w, h] = e.target.value.split('x').map(Number); setRes(w, h); still(); };
+updTon(); still();
+</script>
+</body>
+</html>
