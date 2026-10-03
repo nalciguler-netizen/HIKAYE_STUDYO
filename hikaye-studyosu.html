@@ -136,6 +136,9 @@ summary{cursor:pointer;font-weight:700;color:var(--soft)}
   <label for="metin">Karakterin anlatacağı metin</label>
   <textarea id="metin" placeholder="Merhaba, ben Elif. Size lise yıllarımda başıma gelen bir olayı anlatmak istiyorum..."></textarea>
   <p class="hint">Paragraflar arasında boş satır bırakırsan anlatıcı orada nefes alır ve kamera yeni plana geçer.</p>
+  <div class="row">
+    <button id="btnSenaryoSil" type="button" style="background:#b3261e;color:#fff">Senaryoyu sil</button>
+  </div>
 </section>
 
 <section>
@@ -853,6 +856,14 @@ $('#fMetin').onchange = async e => {
     $('#metin').value = t.replace(/\r/g, '').trim();
     say(`Senaryo yüklendi: ${$('#metin').value.length} karakter.`);
   }catch(err){ say('Dosya okunamadı. .txt ya da .docx dosyası seç, olmazsa metni kopyala-yapıştır.'); }
+};
+
+$('#btnSenaryoSil').onclick = () => {
+  const dolu = $('#metin').value.trim() || $('#baslik').value.trim() || $('#fMetin').value;
+  if(!dolu){ say('Silinecek senaryo yok.'); return; }
+  if(!confirm('Eklenen senaryo, başlık ve seçilen dosya silinecek. Emin misiniz?')) return;
+  $('#metin').value = ''; $('#baslik').value = ''; $('#fMetin').value = '';
+  say('Senaryo silindi. Yeni senaryo ekleyebilirsin.');
 };
 
 /* ================= ARKA PLANDA ÇALIŞMA ================= */
