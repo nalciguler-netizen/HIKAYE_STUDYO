@@ -52,6 +52,16 @@ summary{cursor:pointer;font-weight:700;color:var(--soft)}
 .medya img,.medya video{width:100%;height:100%;object-fit:cover}
 .medya b{position:absolute;left:4px;top:2px;font:800 15px 'Baloo 2',sans-serif;color:var(--sun);text-shadow:0 0 4px #000}
 .medya button{position:absolute;right:2px;top:2px;padding:0 7px;border-radius:8px;font-size:14px;background:rgba(0,0,0,.6)}
+.kuyruk{background:var(--bg);border:2px solid var(--line);border-radius:14px;padding:10px 12px;margin-top:10px}
+.kuyruk.simdi{border-color:var(--sun)}
+.kuyruk.bitti{border-color:var(--ok)}
+.kuyruk.hata{border-color:var(--coral)}
+.kuyruk h3{margin:0;font:600 18px/1.2 'Baloo 2',system-ui,sans-serif;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.kuyruk h3 .badge{margin:0}
+.kuyruk label{font-size:14px;margin:8px 0 2px}
+.kuyruk .hint{font-size:13px;margin:2px 0 0;overflow-wrap:anywhere}
+.kuyruk .durumK{font-weight:700;font-size:14px;margin-top:8px}
+.kuyruk .row button{padding:8px 10px;font-size:15px}
 </style>
 </head>
 <body>
@@ -191,6 +201,23 @@ summary{cursor:pointer;font-weight:700;color:var(--soft)}
   <div id="sonuc"></div>
 </section>
 
+<section id="toplu">
+  <h2><span class="n">5</span>Toplu üretim</h2>
+  <p class="hint">Senaryoları ve Kaggle'dan inen ses dosyalarını birlikte seç. Aynı adı taşıyanlar (02_24_erkek.txt ve 02_24_erkek.wav) kendiliğinden eşleşir. Sonra her satıra karakterini seç ve hepsini sırayla ürettir.</p>
+  <label for="fTopluMetin">Senaryo dosyaları</label>
+  <input id="fTopluMetin" type="file" accept=".txt,text/plain" multiple>
+  <label for="fTopluSes">Ses dosyaları</label>
+  <input id="fTopluSes" type="file" accept="audio/*,.wav" multiple>
+  <p class="hint">Sahne seçmediğin satırlarda 2. bölümdeki sahne kullanılır. Kalite, altyazı ve müzik 4. bölümdeki ayarlardan alınır. Yaş ve cinsiyet dosya adından okunur.</p>
+  <div id="kuyruk"></div>
+  <button id="btnToplu" class="main">Hepsini sırayla üret</button>
+  <div class="row">
+    <button id="btnTopluDur" class="gizli" style="background:var(--coral);color:#fff">Durdur</button>
+    <button id="btnTopluSil">Listeyi temizle</button>
+  </div>
+  <p class="hint">Videolar tek tek üretilir, her biri bitince telefona iner. İlk videoda Chrome "birden fazla dosya indirilsin mi" diye sorarsa izin ver. Yarıda kalırsa uygulamayı açıp "Kalanları üret"e bas, kaldığı yerden devam eder.</p>
+</section>
+
 </main>
 <script type="module">
 const $ = s => document.querySelector(s);
@@ -200,8 +227,9 @@ let W = 1280, H = 720;
 const S = { bg:null, ch:null, chName:'', pts:{mouth:null, eyeL:null, eyeR:null},
             scale:1, off:0, mw:.09, es:.045, skin:'#e8b796', lip:'#a85a55', gender:'Kadın', age:30 };
 let mark = null, running = false, AUD = null, TTS = null, AC = null, FL = null, hidden = false;
+let BATCH = false, BATCH_STOP = false, ROWSTAT = null, Q = [];
 
-const say = t => $('#durum').textContent = t;
+const say = t => { $('#durum').textContent = t; if(BATCH && ROWSTAT) ROWSTAT.textContent = t; };
 const bar = f => $('#bar').style.width = (Math.max(0, Math.min(1, f))*100).toFixed(1) + '%';
 const ac = () => AC || (AC = new (window.AudioContext || window.webkitAudioContext)());
 const tick = () => new Promise(r => setTimeout(r, 0));
@@ -959,7 +987,7 @@ async function prepare(){
   return P;
 }
 function fileName(ext){
-  return ($('#baslik').value.trim() || S.chName.replace(/\.[^.]+$/, '') || 'hikaye')
+  return (S.outName || $('#baslik').value.trim() || S.chName.replace(/\.[^.]+$/, '') || 'hikaye')
     .replace(/[^\wçğıöşüÇĞİÖŞÜ -]/g, '').trim().replace(/\s+/g, '_') + '.' + ext;
 }
 function offerDownload(blob, ext){
@@ -1192,16 +1220,16 @@ $('#btnSil').onclick = async () => {
   showBanner(); say('Kayıtlı iş silindi.');
 };
 
-async function produce(resumeJob){
+async function produce(resumeJob, batch = false){
   keepAlive(true);                 // dokunuş anında başlamalı: sekmeyi arka planda canlı tutar
-  if(!S.ch && LAYOUT !== 'sadece'){ keepAlive(false); return say('Önce karakter görselini seç.'); }
+  if(!S.ch && LAYOUT !== 'sadece'){ if(!batch) keepAlive(false); say('Önce karakter görselini seç.'); return { ok:false, msg:'Karakter görseli yok' }; }
   let job = resumeJob || null;
   if(!job){
     let old = null; try{ old = await DB.get('jobs', 'aktif'); }catch(e){}
     const sig = signature();
     if(old && old.sig === sig && old.stage !== 'bitti') job = old;
     else {
-      if(old && old.stage !== 'bitti' && !confirm('Yarım kalan başka bir video var. Silinip bu video başlatılsın mı?')){ keepAlive(false); return; }
+      if(old && old.stage !== 'bitti' && !batch && !confirm('Yarım kalan başka bir video var. Silinip bu video başlatılsın mı?')){ keepAlive(false); return { ok:false, stopped:true }; }
       if(old) await clearJob(old);
       job = { id:'is' + Date.now(), sig, created:Date.now(), stage:'ses', partsDone:0, totalParts:0,
               seed: Math.floor(Math.random()*1e9), title:$('#baslik').value.trim(), text:$('#metin').value,
@@ -1217,13 +1245,13 @@ async function produce(resumeJob){
   notifyState('🎬 Hazırlanıyor...');
   const started = performance.now();
   try{
-    const P = await prepare(); if(!P){ say('Durduruldu. Kaldığı yerden devam edebilirsin.'); return; }
+    const P = await prepare(); if(!P){ say('Durduruldu. Kaldığı yerden devam edebilirsin.'); return { ok:false, stopped:true }; }
     P.seed = job.seed;
     const C = await pickCodecs(P.w, P.h);
     let out;
     if(C){
       const ok = await renderParts(P, C, job);
-      if(!ok){ say('Durduruldu. Uygulamayı tekrar açınca kaldığı yerden devam edebilirsin.'); notifyState('Hikâye Stüdyosu'); return; }
+      if(!ok){ say('Durduruldu. Uygulamayı tekrar açınca kaldığı yerden devam edebilirsin.'); notifyState('Hikâye Stüdyosu'); return { ok:false, stopped:true }; }
       const blob = await muxAll(P, C, job);
       out = { blob, ext:'mp4' };
       job.stage = 'bitti'; job.final = blob;
@@ -1234,16 +1262,169 @@ async function produce(resumeJob){
     const dk = ((performance.now() - started)/60000).toFixed(1);
     say(`Video hazır (${dk} dakika). İndirip YouTube'a yükleyebilirsin.` +
         (SKIPPED.length ? ` Uyarı: ${SKIPPED.length} cümle seslendirilemedi ve yerine kısa sessizlik kondu: "${SKIPPED[0].slice(0, 50)}..."` : ''));
-    notifyState('✅ Video hazır - Hikâye Stüdyosu');
-    keepAlive(false); chime();
+    if(!batch){ notifyState('✅ Video hazır - Hikâye Stüdyosu'); keepAlive(false); chime(); }
+    return { ok:true, blob:out.blob, ext:out.ext };
   }catch(e){
     say((e.message === 'Durduruldu' ? 'Durduruldu.' : 'Video üretilemedi: ' + (e.message || e)) + ' Kaldığı yerden devam edebilirsin.');
-    notifyState('⚠️ Durdu - Hikâye Stüdyosu');
-    keepAlive(false); try{ navigator.vibrate && navigator.vibrate(600); }catch(_){}
+    if(!batch){ notifyState('⚠️ Durdu - Hikâye Stüdyosu'); keepAlive(false); try{ navigator.vibrate && navigator.vibrate(600); }catch(_){} }
+    return { ok:false, stopped: e.message === 'Durduruldu' || !running, msg: e.message || String(e) };
   }finally{
-    keepAlive(false); stopVideos(); running = false; lock(false); still(); showBanner();
+    if(!batch) keepAlive(false); stopVideos(); running = false; lock(false); still(); showBanner();
   }
 }
+/* ================= TOPLU ÜRETİM (sıra ile, kaldığı yerden devam) ================= */
+const PEND = {};
+const esc = t => String(t).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const qKey = n => n.replace(/\.[^.]+$/, '').replace(/\s*\(\d+\)$/, '').trim().toLocaleLowerCase('tr').replace(/ı/g, 'i').replace(/\s+/g, '_');
+const saveQ = () => DB.put('jobs', 'kuyruk', Q).catch(() => {});
+async function readText(f){
+  const b = await f.arrayBuffer();
+  let t = new TextDecoder('utf-8').decode(b);
+  if(t.includes('\uFFFD')) t = new TextDecoder('windows-1254').decode(b);
+  return t.replace(/\r/g, '').trim();
+}
+function downloadBlob(blob, ad){
+  const url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = ad; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+function stateText(it){
+  if(it.state === 'simdi') return 'Hazırlanıyor...';
+  if(it.state === 'bitti') return 'Hazır, telefona indi.';
+  if(it.state === 'hata') return 'Olmadı: ' + it.msg;
+  if(!it.audio) return 'Bu senaryonun ses dosyasını seç.';
+  if(!it.ch) return 'Karakter görselini seç.';
+  return it.msg || 'Sırada.';
+}
+function renderQ(){
+  const box = $('#kuyruk'); box.innerHTML = ''; ROWSTAT = null;
+  if(!Q.length) box.innerHTML = '<p class="hint">Henüz senaryo eklenmedi.</p>';
+  Q.forEach((it, i) => {
+    const d = document.createElement('div'); d.className = 'kuyruk ' + (it.state || '');
+    d.innerHTML = `<h3><span>${esc(it.name)}</span><span class="badge ${it.audio ? 'ok' : 'warn'}">${it.audio ? 'Ses var' : 'Ses yok'}</span></h3>
+      <div class="two">
+        <div><label>Karakter<input type="file" accept="image/*" data-k="ch"></label><p class="hint">${it.ch ? esc(it.ch.name) : 'Seçilmedi'}</p></div>
+        <div><label>Sahne<input type="file" accept="image/*" data-k="bg"></label><p class="hint">${it.bg ? esc(it.bg.name) : '2. bölümdeki sahne'}</p></div>
+      </div>
+      <div class="durumK">${esc(stateText(it))}</div>
+      <div class="row">${it.state === 'bitti' ? '<button data-a="indir">Tekrar indir</button>' : ''}<button data-a="sil">Listeden çıkar</button></div>`;
+    d.querySelectorAll('input[data-k]').forEach(inp => {
+      inp.disabled = BATCH;
+      inp.onchange = e => { const f = e.target.files[0]; if(!f) return;
+        it[inp.dataset.k] = f; if(it.state === 'hata' || it.state === 'bitti'){ it.state = ''; it.msg = ''; }
+        saveQ(); renderQ(); };
+    });
+    const bi = d.querySelector('[data-a="indir"]');
+    if(bi) bi.onclick = async () => { const b = await DB.get('jobs', 'sonuc:' + it.name).catch(() => null);
+      if(b) downloadBlob(b, it.name + '.mp4'); else say('Bu video artık kayıtlı değil, yeniden üretmen gerekiyor.'); };
+    const bs = d.querySelector('[data-a="sil"]'); bs.disabled = BATCH;
+    bs.onclick = () => { Q.splice(i, 1); DB.del('jobs', 'sonuc:' + it.name).catch(() => {}); saveQ(); renderQ(); };
+    if(it.state === 'simdi') ROWSTAT = d.querySelector('.durumK');
+    box.appendChild(d);
+  });
+  const left = Q.filter(x => x.state !== 'bitti').length, btn = $('#btnToplu');
+  btn.textContent = !Q.length ? 'Hepsini sırayla üret' : left === Q.length ? `Hepsini sırayla üret (${left})` : `Kalanları üret (${left})`;
+  btn.disabled = BATCH || !left;
+  $('#btnTopluSil').disabled = BATCH;
+  $('#btnTopluDur').classList.toggle('gizli', !BATCH);
+  $('#fTopluMetin').disabled = $('#fTopluSes').disabled = BATCH;
+}
+const sortQ = () => Q.sort((a, b) => a.name.localeCompare(b.name, 'tr', {numeric:true}));
+$('#fTopluMetin').onchange = async e => {
+  let n = 0;
+  for(const f of e.target.files){
+    try{
+      const name = qKey(f.name), text = await readText(f);
+      let it = Q.find(x => x.name === name);
+      if(!it){ it = { name, text, audio:null, ch:null, bg:null, state:'', msg:'' }; Q.push(it); }
+      else { it.text = text; if(it.state === 'bitti'){ it.state = ''; } }
+      if(PEND[name]){ it.audio = PEND[name]; delete PEND[name]; }
+      n++;
+    }catch(err){ say('Okunamadı: ' + f.name); }
+  }
+  e.target.value = ''; sortQ(); saveQ(); renderQ();
+  say(`${n} senaryo eklendi.`);
+};
+$('#fTopluSes').onchange = e => {
+  let m = 0, k = 0;
+  for(const f of e.target.files){
+    const name = qKey(f.name), it = Q.find(x => x.name === name);
+    if(it){ it.audio = f; if(it.state === 'hata'){ it.state = ''; it.msg = ''; } m++; } else { PEND[name] = f; k++; }
+  }
+  e.target.value = ''; saveQ(); renderQ();
+  say(`${m} ses eşleşti.` + (k ? ` ${k} sesin senaryosu henüz yok, senaryosunu seçince eşleşecek.` : ''));
+};
+$('#btnTopluSil').onclick = async () => {
+  if(BATCH || !Q.length) return;
+  if(!confirm('Toplu üretim listesi ve hazır videoların kayıtları silinsin mi? (Telefona inen videolar silinmez.)')) return;
+  Q = []; try{ await DB.del('jobs', 'kuyruk'); await DB.delPrefix('jobs', 'sonuc:'); }catch(e){}
+  renderQ(); say('Liste temizlendi.');
+};
+$('#btnTopluDur').onclick = () => { BATCH_STOP = true; running = false; say('Durduruluyor...'); };
+
+async function loadItem(it){
+  S.chFile = it.ch; S.ch = await loadImg(it.ch); S.chOrig = S.ch; S.chName = it.ch.name;
+  LAYOUT = S.ch.width > S.ch.height*1.2 ? 'birlesik' : 'karakter'; $('#duzen').value = LAYOUT;
+  MEDIA = []; renderMediaList();
+  const bg = it.bg || null;
+  if(bg){ S.bgFile = bg; S.bg = await loadImg(bg); } else { S.bgFile = null; S.bg = null; }
+  S.pts = {mouth:null, eyeL:null, eyeR:null}; S.crop = null; S.scale = 1; S.off = 0;
+  $('#rScale').value = 1; $('#rOff').value = 0;
+  const had = loadSaved();
+  if(had && S.pts.mouth){ if(S.crop) S.ch = cropImg(S.ch, S.crop); else autoFrame(); }
+  else {
+    say('Karakterin yüzü aranıyor...');
+    if(!(await detectFace(S.ch))) throw new Error('karakterin yüzü bulunamadı. Bu karakteri 1. bölümde tek başına açıp yüzü elle işaretle, sonra tekrar dene.');
+    autoFrame();
+  }
+  const m = it.name.match(/(\d+)_(erkek|kadin|kadın)/i);
+  if(m){ S.age = Math.min(90, Math.max(5, +m[1])); S.gender = /erkek/i.test(m[2]) ? 'Erkek' : 'Kadın'; }
+  $('#cinsiyet').value = S.gender; $('#yas').value = S.age; $('#yasYaz').textContent = S.age;
+  sampleSkin(); save(); prepComposite();
+  $('#metin').value = it.text; $('#baslik').value = ''; S.outName = it.name;
+  S.audioFile = it.audio; $('#kaynak').value = 'dosya'; $('#kaynak').onchange({ target:$('#kaynak') });
+  $('#tonAuto').checked = false; $('#rTon').disabled = false; $('#rTon').value = 1; $('#tonYaz').textContent = '1.00';
+  const [w, h] = $('#cozunurluk').value.split('x').map(Number); setRes(w, h); still();
+}
+
+$('#btnToplu').onclick = async () => {
+  if(BATCH || running) return;
+  keepAlive(true);                 // dokunuş anında başlamalı
+  const todo = Q.filter(x => x.state !== 'bitti');
+  const eksik = todo.find(x => !x.audio || !x.ch);
+  if(!todo.length || eksik){
+    keepAlive(false);
+    return say(!todo.length ? 'Üretilecek video yok.' : `"${eksik.name}" için ${!eksik.audio ? 'ses dosyası' : 'karakter görseli'} eksik.`);
+  }
+  BATCH = true; BATCH_STOP = false;
+  if(S.bgFile) Q.forEach(x => { if(!x.bg && x.state !== 'bitti') x.bg = S.bgFile; });
+  let ok = 0, bad = 0;
+  for(const it of Q){
+    if(it.state === 'bitti') continue;
+    if(BATCH_STOP) break;
+    it.state = 'simdi'; it.msg = ''; renderQ();
+    try{ await loadItem(it); }
+    catch(e){ it.state = 'hata'; it.msg = e.message || String(e); bad++; await saveQ(); renderQ(); continue; }
+    notifyState(`🎬 ${Q.indexOf(it) + 1}/${Q.length}: ${it.name}`);
+    const r = await produce(null, true);
+    if(r && r.ok){
+      it.state = 'bitti'; ok++;
+      try{ await DB.put('jobs', 'sonuc:' + it.name, r.blob); }catch(e){}
+    } else if(r && r.stopped){ it.state = ''; it.msg = 'Durduruldu, kaldığı yerden devam eder.'; BATCH_STOP = true; }
+    else { it.state = 'hata'; it.msg = (r && r.msg) || 'bilinmeyen sorun'; bad++; }
+    await saveQ(); renderQ();
+  }
+  BATCH = false; S.outName = null; keepAlive(false); renderQ();
+  const left = Q.filter(x => x.state !== 'bitti').length;
+  const msg = BATCH_STOP ? `Durduruldu. ${ok} video hazır, ${left} video kaldı.` : `Bitti: ${ok} video hazır` + (bad ? `, ${bad} videoda sorun var (satırlarda yazıyor).` : '.');
+  say(msg); notifyState((BATCH_STOP ? '⏸️ ' : '✅ ') + msg); chime();
+};
+(async () => {
+  try{ Q = (await DB.get('jobs', 'kuyruk')) || []; }catch(e){ Q = []; }
+  Q.forEach(it => { if(it.state === 'simdi'){ it.state = ''; it.msg = 'Yarıda kaldı, kaldığı yerden devam eder.'; } });
+  renderQ();
+})();
+
 $('#btnOn').onclick = () => preview();
 $('#btnRec').onclick = () => produce();
 showBanner();
