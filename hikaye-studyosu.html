@@ -131,7 +131,8 @@ summary{cursor:pointer;font-weight:700;color:var(--soft)}
   <label for="duzen">Görüntü düzeni</label>
   <p class="hint">"Tek resim" düzeninde Colab'da karakterle birlikte üretilen sahne resmini 1. bölümde karakter olarak seç; ayrıca sahne seçmen gerekmez.</p>
   <select id="duzen">
-    <option value="birlesik">Karakter sahnenin içinde (tek resim, en doğal)</option>
+    <option value="uc">3B sahne: kamera karakterin yüzüne odaklanır (yandan duranlar dahil)</option>
+    <option value="birlesik">Karakter sahnenin içinde, kameraya bakıyor (ağız ve göz oynar)</option>
     <option value="karakter" selected>Karakter ve sahne ayrı resim</option>
     <option value="ekran">Görüntüler tam ekran, karakter köşede anlatır</option>
     <option value="sadece">Sadece görüntüler ve anlatım (karakter yok)</option>
@@ -226,6 +227,7 @@ const S = { bg:null, ch:null, chName:'', pts:{mouth:null, eyeL:null, eyeR:null},
             scale:1, off:0, mw:.09, es:.045, skin:'#e8b796', lip:'#a85a55', gender:'Kadın', age:30 };
 let mark = null, running = false, AUD = null, TTS = null, AC = null, FL = null, hidden = false;
 let BATCH = false, BATCH_STOP = false, ROWSTAT = null, Q = [];
+const U3 = { ready:false }; let DEPTH = null, POSE = null, VISION = null;
 
 const say = t => { $('#durum').textContent = t; if(BATCH && ROWSTAT) ROWSTAT.textContent = t; };
 const bar = f => $('#bar').style.width = (Math.max(0, Math.min(1, f))*100).toFixed(1) + '%';
@@ -245,8 +247,14 @@ $('#fChar').onchange = async e => {
   S.chFile = f;
   S.ch = await loadImg(f); S.chOrig = S.ch; S.chName = f.name;
   // Yatay (sahneli) resim ise "tek resim" düzenine, dikey/şeffaf karakter ise ayrı düzene geç
-  if(S.ch.width > S.ch.height*1.2){ if(LAYOUT !== 'birlesik'){ LAYOUT = 'birlesik'; $('#duzen').value = 'birlesik'; } }
-  else if(LAYOUT === 'birlesik'){ LAYOUT = 'karakter'; $('#duzen').value = 'karakter'; }
+  if(S.ch.width > S.ch.height*1.2){ if(LAYOUT !== 'birlesik' && LAYOUT !== 'uc'){ LAYOUT = 'uc'; $('#duzen').value = 'uc'; } }
+  else if(LAYOUT === 'birlesik' || LAYOUT === 'uc'){ LAYOUT = 'karakter'; $('#duzen').value = 'karakter'; }
+  if(LAYOUT === 'uc'){
+    S.pts = {mouth:null, eyeL:null, eyeR:null}; S.crop = null;
+    badge('3B sahne hazırlanıyor...');
+    try{ await prep3d(); badge('3B sahne hazır', 'ok'); }catch(err){ badge('3B sahne kurulamadı: ' + (err.message || err), 'warn'); }
+    still(); return;
+  }
   S.pts = {mouth:null, eyeL:null, eyeR:null};
   S.crop = null;
   const had = loadSaved();
@@ -291,6 +299,111 @@ async function detectFace(img){
 
 function setRes(w, h){ W = w; H = h; cv.width = w; cv.height = h; }
 
+/* ================= 3B SAHNE: derinlik + sanal kamera ================= */
+async function vision(){
+  if(!VISION){
+    const V = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs');
+    VISION = { V, fs: await V.FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm') };
+  }
+  return VISION;
+}
+function smallCanvas(img, max){
+  const k = Math.min(1, max/Math.max(img.width, img.height)), c = document.createElement('canvas');
+  c.width = Math.round(img.width*k); c.height = Math.round(img.height*k);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); return c;
+}
+/* Yandan, önden, oturan: vücut iskeletinden burun-göz-kulak-ağız noktalarını bulur */
+async function findFace(img){
+  try{
+    const { V, fs } = await vision();
+    if(!POSE) POSE = await V.PoseLandmarker.createFromOptions(fs, {
+      baseOptions:{ modelAssetPath:'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task' },
+      runningMode:'IMAGE', numPoses:1 });
+    const r = POSE.detect(smallCanvas(img, 960)), L = r.landmarks && r.landmarks[0];
+    if(!L) return null;
+    const pts = [0,1,2,3,4,5,6,7,8,9,10].map(i => L[i]).filter(p => p && (p.visibility === undefined || p.visibility > .3));
+    if(!pts.length) return null;
+    const x = pts.reduce((a, p) => a + p.x, 0)/pts.length, y = pts.reduce((a, p) => a + p.y, 0)/pts.length;
+    const sh = [L[11], L[12]].filter(p => p && p.visibility > .3);
+    const size = sh.length === 2 ? Math.hypot(sh[0].x - sh[1].x, sh[0].y - sh[1].y) : .15;
+    return { x, y, size:Math.max(.06, Math.min(.5, size)) };
+  }catch(e){ console.warn(e); return null; }
+}
+async function estimateDepth(img){
+  if(!DEPTH){
+    const T = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.2');
+    DEPTH = await T.pipeline('depth-estimation', 'Xenova/depth-anything-small-hf', { device:'wasm',
+      progress_callback: p => { if(p.status === 'progress' && p.total > 1e6) say(`3B modeli indiriliyor (yalnızca ilk sefer): %${Math.round(p.progress || 0)}`); } });
+  }
+  say('Sahnenin derinliği hesaplanıyor...');
+  const c = smallCanvas(img, 640);
+  const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', .92)), url = URL.createObjectURL(blob);
+  try{
+    const out = await DEPTH(url), d = out.depth, ch = d.channels || 1, n = d.width*d.height, data = new Uint8Array(n);
+    for(let i = 0; i < n; i++) data[i] = d.data[i*ch];
+    return { w:d.width, h:d.height, data };
+  } finally { URL.revokeObjectURL(url); }
+}
+async function prep3d(){
+  const img = S.chOrig || S.ch; if(!img) throw new Error('resim yok');
+  U3.ready = false;
+  const key = 'derinlik:' + S.chName + ':' + (S.chFile ? S.chFile.size : img.width);
+  let rec = null; try{ rec = await DB.get('jobs', key); }catch(e){}
+  if(!rec){
+    say('Karakter aranıyor...');
+    const face = await findFace(img);
+    const dep = await estimateDepth(img);
+    rec = { ...dep, face }; try{ await DB.put('jobs', key, rec); }catch(e){}
+  }
+  const T = U3.T || (U3.T = await import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js'));
+  if(!U3.renderer){
+    U3.renderer = new T.WebGLRenderer({ antialias:true, preserveDrawingBuffer:true });
+    U3.renderer.outputColorSpace = T.LinearSRGBColorSpace;
+    U3.scene = new T.Scene(); U3.camera = new T.PerspectiveCamera(30, W/H, .01, 20);
+  }
+  if(U3.mesh){ U3.scene.remove(U3.mesh); U3.mesh.geometry.dispose(); U3.mat.uniforms.map.value.dispose(); U3.mat.uniforms.dmap.value.dispose(); U3.mat.dispose(); }
+  // derinlik haritası: kenar yırtılmasını azaltmak için hafif bulanık
+  const dc = document.createElement('canvas'); dc.width = rec.w; dc.height = rec.h;
+  const id = dc.getContext('2d').createImageData(rec.w, rec.h);
+  for(let i = 0; i < rec.data.length; i++){ const v = rec.data[i]; id.data[i*4] = id.data[i*4+1] = id.data[i*4+2] = v; id.data[i*4+3] = 255; }
+  dc.getContext('2d').putImageData(id, 0, 0);
+  const bc = document.createElement('canvas'); bc.width = rec.w; bc.height = rec.h;
+  const bg = bc.getContext('2d'); bg.filter = 'blur(2px)'; bg.drawImage(dc, 0, 0);
+  const tex = new T.Texture(smallCanvas(img, 2048)); tex.colorSpace = T.NoColorSpace; tex.minFilter = T.LinearFilter; tex.generateMipmaps = false; tex.needsUpdate = true;
+  const dtex = new T.CanvasTexture(bc); dtex.colorSpace = T.NoColorSpace; dtex.minFilter = T.LinearFilter; dtex.generateMipmaps = false;
+  const A = img.width/img.height, K = .14;
+  U3.mat = new T.ShaderMaterial({ uniforms:{ map:{ value:tex }, dmap:{ value:dtex }, k:{ value:K } },
+    vertexShader:'uniform sampler2D dmap; uniform float k; varying vec2 vUv; void main(){ vUv = uv; vec3 p = position; p.z += texture2D(dmap, uv).r*k; gl_Position = projectionMatrix*modelViewMatrix*vec4(p, 1.0); }',
+    fragmentShader:'uniform sampler2D map; varying vec2 vUv; void main(){ gl_FragColor = texture2D(map, vUv); }' });
+  U3.mesh = new T.Mesh(new T.PlaneGeometry(A, 1, 256, Math.max(32, Math.round(256/A))), U3.mat);
+  U3.scene.add(U3.mesh);
+  const f = rec.face || { x:.5, y:.38, size:.2 };
+  const fd = rec.data[Math.min(rec.h - 1, Math.floor(f.y*rec.h))*rec.w + Math.min(rec.w - 1, Math.floor(f.x*rec.w))]/255;
+  Object.assign(U3, { A, K, face:{ x:(f.x - .5)*A, y:.5 - f.y, z:fd*K, size:f.size }, found:!!rec.face, ready:true });
+  say(rec.face ? '3B sahne hazır, kamera karakterin yüzüne odaklanacak.' : '3B sahne hazır. Yüz bulunamadı, kamera resmin üst ortasına odaklanacak.');
+}
+/* Sanal kamera: geniş plandan yüze doğru yaklaşır, yavaşça kayar; derinlik sayesinde sahne gerçek 3B gibi hareket eder */
+function render3d(fr){
+  const { T = 0, zoom = 1, rot = 0, o = 0, bob = 0 } = fr, U = U3, R = U.renderer, cam = U.camera;
+  if(R.domElement.width !== W || R.domElement.height !== H){ R.setPixelRatio(1); R.setSize(W, H, false); }
+  cam.aspect = W/H; cam.updateProjectionMatrix();
+  const tn = Math.tan(cam.fov*Math.PI/360), fit = Math.min(1, U.A/(W/H));
+  const d0 = fit/(2*tn)*.9;                                        // plan: sahnenin tamamı
+  const push = Math.max(0, (zoom - 1)/.32);                        // 0 geniş, 1 yakın plan
+  const closeH = Math.min(.8, Math.max(.32, U.face.size*2.4));       // yakın planda görünen yükseklik
+  const dist = lerp(d0, closeH/(2*tn), Math.min(1, push)) - o*.004;
+  const fk = .25 + .75*Math.min(1, push);
+  let tx = lerp(0, U.face.x, fk), ty = lerp(0, U.face.y, fk);
+  const vh = dist*tn, vw = vh*W/H;                                  // görünen yarı boyutlar, kenar taşmasın
+  tx = Math.max(-U.A/2 + vw*1.04, Math.min(U.A/2 - vw*1.04, tx));
+  ty = Math.max(-.5 + vh*1.04, Math.min(.5 - vh*1.04, ty));
+  const sway = Math.sin(T*.11)*.035 + rot*.5, lift = Math.sin(T*.07)*.012 - bob/H*.25;
+  cam.position.set(tx + sway*dist, ty + lift*dist, U.face.z*fk + dist);
+  cam.lookAt(tx, ty, U.face.z*fk);
+  R.render(U.scene, cam);
+  return R.domElement;
+}
+
 /* ===== Karakteri sahneyle kaynaştırma: sahnenin ışık rengi, yumuşak gölge, arka planda odak ===== */
 function avgColor(img){
   const c = document.createElement('canvas'); c.width = c.height = 8; const g = c.getContext('2d');
@@ -308,7 +421,7 @@ function prepComposite(){
       const g = c.getContext('2d'); g.filter = 'blur(' + Math.max(1.5, c.width/700) + 'px)';
       g.drawImage(S.bg, -6, -6, c.width + 12, c.height + 12); S.bgDraw = c; }catch(e){}
   }
-  if(!S.ch || !S.bg || LAYOUT === 'birlesik') return;
+  if(!S.ch || !S.bg || LAYOUT === 'birlesik' || LAYOUT === 'uc') return;
   try{
     const amb = avgColor(S.bg), w = S.ch.width, h = S.ch.height;
     const t = document.createElement('canvas'); t.width = w; t.height = h; const tg = t.getContext('2d');
@@ -341,7 +454,7 @@ function uncrop(){
   $('#rMw').value = S.mw; $('#rEs').value = S.es;
 }
 function autoFrame(){
-  if(LAYOUT === 'birlesik') return;
+  if(LAYOUT === 'birlesik' || LAYOUT === 'uc') return;
   const img = S.ch, iw = img.width, ih = img.height, p = S.pts;
   if(!p.eyeL || !p.eyeR || !p.mouth) return;
   const fx = (p.eyeL.x + p.eyeR.x)/2*iw, fy = ((p.eyeL.y + p.eyeR.y)/2*.6 + p.mouth.y*.4)*ih;
@@ -396,10 +509,12 @@ $('#fMedya').onchange = async e => {
   if(MEDIA.length && LAYOUT === 'karakter'){ LAYOUT = 'ekran'; $('#duzen').value = 'ekran'; }
   say(`${MEDIA.length} görüntü eklendi.`); still();
 };
-$('#duzen').onchange = e => {
+$('#duzen').onchange = async e => {
   LAYOUT = e.target.value;
-  if(S.ch){ if(LAYOUT === 'birlesik') uncrop(); else if(!S.crop) autoFrame(); save(); sampleSkin(); }
+  if(S.ch){ if(LAYOUT === 'birlesik' || LAYOUT === 'uc') uncrop(); else if(!S.crop) autoFrame(); save(); sampleSkin(); }
   prepComposite(); still();
+  if(LAYOUT === 'uc' && S.ch){ badge('3B sahne hazırlanıyor...');
+    try{ await prep3d(); badge('3B sahne hazır', 'ok'); }catch(err){ badge('3B sahne kurulamadı: ' + (err.message || err), 'warn'); } still(); }
 };
 function mediaPlan(P){
   const m = MEDIA.length; if(!m || !(LAYOUT === 'ekran' || LAYOUT === 'sadece')) return null;
@@ -485,6 +600,12 @@ function draw(fr){
           warm = 0, cool = 0, titleA = 0, title = '', black = 0, media = null } = fr;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = '#10202b'; ctx.fillRect(0, 0, W, H);
+  if(LAYOUT === 'uc'){
+    if(U3.ready && S.ch) ctx.drawImage(render3d(fr), 0, 0, W, H);
+    else { ctx.fillStyle = '#B9CBD6'; ctx.font = `600 ${H*.045}px Nunito, sans-serif`; ctx.textAlign = 'center';
+           ctx.fillText(S.ch ? '3B sahne hazırlanıyor...' : 'Sahne resmini seç', W/2, H/2); }
+    return finishFrame(warm, cool, false, sub, titleA, title, black);
+  }
   const useMedia = (LAYOUT === 'ekran' || LAYOUT === 'sadece') && MEDIA.length > 0;
   if(useMedia) drawMediaLayer(media);
   if(!useMedia && S.ch && zoom > 1.001){
@@ -546,6 +667,9 @@ function draw(fr){
     }
     ctx.restore();
   }
+  finishFrame(warm, cool, marks, sub, titleA, title, black);
+}
+function finishFrame(warm, cool, marks, sub, titleA, title, black){
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   if(warm > .01){ ctx.fillStyle = `rgba(255,170,80,${.08*warm})`; ctx.fillRect(0, 0, W, H); }
   if(cool > .01){ ctx.fillStyle = `rgba(50,80,150,${.14*cool})`; ctx.fillRect(0, 0, W, H); }
@@ -968,7 +1092,10 @@ function lock(on){ ['#btnRec', '#btnOn', '#btnDinle'].forEach(s => $(s).disabled
 
 async function prepare(){
   if((LAYOUT === 'ekran' || LAYOUT === 'sadece') && !MEDIA.length) throw new Error('Bu düzen için önce ekran görüntüsü ya da kaydı ekle.');
-  if(LAYOUT !== 'sadece'){
+  if(LAYOUT === 'uc'){
+    if(!S.ch) throw new Error('Önce sahne resmini seç.');
+    if(!U3.ready) await prep3d();
+  } else if(LAYOUT !== 'sadece'){
     if(!S.ch) throw new Error('Önce karakter görselini seç.');
     if(!S.pts.mouth) throw new Error('Karakterin ağzı bulunamadı. "Yüzü elle düzelt" bölümünden işaretle.');
   }
@@ -980,7 +1107,7 @@ async function prepare(){
   say('Miksaj yapılıyor...');
   const master = await mix(lead, $('#muzik').checked);
   const P = { master, lead, title, D: master.duration, w, h,
-           camOn: $('#kamera').checked && (LAYOUT === 'karakter' || LAYOUT === 'birlesik'), subOn: $('#altyazi').checked };
+           camOn: $('#kamera').checked && (LAYOUT === 'karakter' || LAYOUT === 'birlesik' || LAYOUT === 'uc'), subOn: $('#altyazi').checked };
   P.slots = mediaPlan(P);
   return P;
 }
@@ -1183,7 +1310,9 @@ async function restoreJob(job){
   $('#rScale').value = S.scale; $('#rOff').value = S.off; $('#rMw').value = S.mw; $('#rEs').value = S.es;
   $('#tonYaz').textContent = (+$('#rTon').value).toFixed(2);
   badge('Yüz hazır (kayıtlı iş)', 'ok');
-  const [w, h] = o.res.split('x').map(Number); setRes(w, h); still();
+  const [w, h] = o.res.split('x').map(Number); setRes(w, h);
+  if(LAYOUT === 'uc'){ try{ await prep3d(); }catch(e){} }
+  still();
 }
 async function showBanner(){
   let job = null; try{ job = await DB.get('jobs', 'aktif'); }catch(e){}
@@ -1339,24 +1468,18 @@ $('#btnTopluDur').onclick = () => { BATCH_STOP = true; running = false; say('Dur
 
 async function loadItem(it, name){
   S.chFile = it.sahne; S.ch = await loadImg(it.sahne); S.chOrig = S.ch; S.chName = it.sahne.name;
-  LAYOUT = 'birlesik'; $('#duzen').value = LAYOUT;
+  LAYOUT = 'uc'; $('#duzen').value = LAYOUT;
   MEDIA = []; renderMediaList();
-  S.bgFile = null; S.bg = null;
-  S.pts = {mouth:null, eyeL:null, eyeR:null}; S.crop = null; S.scale = 1; S.off = 0;
-  $('#rScale').value = 1; $('#rOff').value = 0;
-  const had = loadSaved(); if(S.crop) uncrop();
-  if(!(had && S.pts.mouth)){
-    say('Karakterin yüzü aranıyor...');
-    if(!(await detectFace(S.ch))) throw new Error('resimde yüz bulunamadı. Bu resmi 1. bölümde tek başına açıp yüzü elle işaretle, sonra tekrar dene.');
-  }
+  S.bgFile = null; S.bg = null; S.crop = null; S.pts = {mouth:null, eyeL:null, eyeR:null};
   const m = name.match(/(\d+)_(erkek|kadin|kadın)/i);
   if(m){ S.age = Math.min(90, Math.max(5, +m[1])); S.gender = /erkek/i.test(m[2]) ? 'Erkek' : 'Kadın'; }
   $('#cinsiyet').value = S.gender; $('#yas').value = S.age; $('#yasYaz').textContent = S.age;
-  sampleSkin(); save(); prepComposite();
+  const [w, h] = $('#cozunurluk').value.split('x').map(Number); setRes(w, h);
+  await prep3d();
   $('#metin').value = it.text; $('#baslik').value = ''; S.outName = name;
   S.audioFile = it.audio; $('#kaynak').value = 'dosya'; $('#kaynak').onchange({ target:$('#kaynak') });
   $('#tonAuto').checked = false; $('#rTon').disabled = false; $('#rTon').value = 1; $('#tonYaz').textContent = '1.00';
-  const [w, h] = $('#cozunurluk').value.split('x').map(Number); setRes(w, h); still();
+  still();
 }
 
 $('#btnToplu').onclick = async () => {
