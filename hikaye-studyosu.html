@@ -66,6 +66,7 @@ footer a{color:var(--sun)}
 </header>
 <nav class="sekmeler" aria-label="Bölümler">
   <button data-sekme="video" class="on">🎬 Video</button>
+  <button data-sekme="toplu">📦 Toplu</button>
   <button data-sekme="2b">🎨 2B Stüdyo</button>
 </nav>
 <main id="tabVideo">
@@ -79,9 +80,14 @@ footer a{color:var(--sun)}
 </section>
 
 <section>
-  <h2><span class="n">1</span>Karakter</h2>
-  <label for="fChar">Karakter görseli (şeffaf PNG)</label>
+  <h2><span class="n">1</span>Sahne</h2>
+  <label for="fChar">Sahne resmi (karakter sahnenin içinde)</label>
   <input id="fChar" type="file" accept="image/*">
+  <div class="row">
+    <button id="btnKut">📚 Kütüphaneden seç</button>
+    <button id="btnVar" disabled>🎲 Yeni varyasyon</button>
+  </div>
+  <label class="check"><input id="fark" type="checkbox" checked> Otomatik farklılaştır (her seçimde farklı ışık, renk tonu ve kadraj)</label>
   <div id="yuzDurum" class="badge">Karakter seçilmedi</div>
   <div class="two">
     <div>
@@ -102,10 +108,7 @@ footer a{color:var(--sun)}
       <button data-m="eyeL">Sol göz</button>
       <button data-m="eyeR">Sağ göz</button>
     </div>
-    <label for="rScale">Karakter boyutu</label>
-    <input id="rScale" type="range" min="0.6" max="1.3" step="0.01" value="1">
-    <label for="rOff">Yatay konum</label>
-    <input id="rOff" type="range" min="-0.35" max="0.35" step="0.005" value="0">
+    <div class="gizli"><input id="rScale" type="range" min="0.6" max="1.3" step="0.01" value="1"><input id="rOff" type="range" min="-0.35" max="0.35" step="0.005" value="0"></div>
     <label for="rMw">Ağız genişliği</label>
     <input id="rMw" type="range" min="0.02" max="0.2" step="0.002" value="0.09">
     <label for="rEs">Göz boyutu</label>
@@ -118,18 +121,15 @@ footer a{color:var(--sun)}
 </section>
 
 <section>
-  <h2><span class="n">2</span>Sahne ve görüntüler</h2>
-  <label for="fBg">Sahne görseli</label>
-  <input id="fBg" type="file" accept="image/*">
+  <h2><span class="n">2</span>Ekran görüntüleri (isteğe bağlı)</h2>
+  <input id="fBg" type="file" accept="image/*" class="gizli">
   <label for="fMedya">Ekran görüntüleri ve ekran kayıtları (isteğe bağlı)</label>
   <input id="fMedya" type="file" accept="image/*,video/*" multiple>
   <p class="hint">Birden fazla resim ve video seçebilirsin. Hikâye boyunca sırayla gösterilirler; sıra dosya adına göredir (ekran görüntülerinde bu, çekilme sırasıdır). Videoların kendi sesi kapatılır, anlatım duyulur.</p>
   <div id="medyaListe" class="row"></div>
   <label for="duzen">Görüntü düzeni</label>
-  <p class="hint">"Tek resim" düzeninde Colab'da karakterle birlikte üretilen sahne resmini 1. bölümde karakter olarak seç; ayrıca sahne seçmen gerekmez.</p>
   <select id="duzen">
-    <option value="birlesik">Karakter sahnenin içinde (tek resim, en doğal)</option>
-    <option value="karakter" selected>Karakter ve sahne ayrı resim</option>
+    <option value="birlesik" selected>Sahne tam ekran (ekran görüntüsü yok)</option>
     <option value="ekran">Görüntüler tam ekran, karakter köşede anlatır</option>
     <option value="sadece">Sadece görüntüler ve anlatım (karakter yok)</option>
   </select>
@@ -202,6 +202,37 @@ footer a{color:var(--sun)}
 </section>
 
 </main>
+<main id="tabToplu" class="gizli">
+<section>
+  <h2><span class="n">📦</span>Toplu video üretimi</h2>
+  <p class="hint">Üç grup dosyayı seç; uygulama aynı adlı olanları eşleştirir. Örnek: <b>01_25_erkek.png</b> + <b>01_25_erkek.wav</b> + <b>01_25_erkek.txt</b> = bir video. Ayarlar (kalite, altyazı, müzik) Video sekmesindekilerle aynıdır.</p>
+  <label for="tResim">Sahne resimleri</label>
+  <input id="tResim" type="file" accept="image/*" multiple>
+  <label for="tSes">Ses kayıtları</label>
+  <input id="tSes" type="file" accept="audio/*" multiple>
+  <label for="tMetin">Senaryolar (.txt, altyazı için)</label>
+  <input id="tMetin" type="file" accept=".txt,text/plain" multiple>
+  <label class="check"><input id="tFark" type="checkbox" checked> Her videoda otomatik farklılaştır</label>
+  <div id="tListe" style="margin-top:12px"></div>
+  <div class="row">
+    <button id="tBasla" style="background:var(--sun);color:var(--bg)">Hepsini üret</button>
+    <button id="tDur" disabled>Durdur</button>
+    <button id="tTemizle">Listeyi temizle</button>
+  </div>
+  <p class="hint">Başlattıktan sonra başka uygulamalara geçebilirsin. Her video bitince telefon titrer ve video iner. Uygulama kapanırsa, açınca "Hepsini üret"e bas: bitenleri atlar, kaldığı yerden devam eder.</p>
+  <div id="tDurum" role="status" style="font-weight:700;margin-top:8px"></div>
+</section>
+</main>
+<dialog id="kutDlg" style="max-width:720px;width:94vw;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:18px;padding:14px">
+  <h2 style="margin-top:0">📚 Sahne kütüphanesi</h2>
+  <div class="two">
+    <div><label for="kCins">Cinsiyet</label><select id="kCins"><option value="">Hepsi</option><option value="kadin">Kadın</option><option value="erkek">Erkek</option></select></div>
+    <div><label for="kYas">Yaş</label><select id="kYas"><option value="">Hepsi</option><option value="14-25">14-25</option><option value="26-45">26-45</option><option value="46-65">46-65</option><option value="66-99">66+</option></select></div>
+  </div>
+  <div id="kIzgara" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;max-height:60vh;overflow:auto"></div>
+  <p id="kDurum" class="hint"></p>
+  <button id="kKapat" class="main" style="background:var(--line);color:var(--text)">Kapat</button>
+</dialog>
 <main id="tab2b" class="gizli">
 <section>
   <h2><span class="n">🎨</span>2B karakter ve sahne</h2>
@@ -245,28 +276,47 @@ function loadImg(file){
 }
 function badge(text, cls){ const b = $('#yuzDurum'); b.textContent = text; b.className = 'badge ' + (cls || ''); }
 
-$('#fChar').onchange = async e => {
-  const f = e.target.files[0]; if(!f) return;
-  S.chFile = f;
-  S.ch = await loadImg(f); S.chOrig = S.ch; S.chName = f.name;
-  // Yatay (sahneli) resim ise "tek resim" düzenine, dikey/şeffaf karakter ise ayrı düzene geç
-  if(S.ch.width > S.ch.height*1.2){ if(LAYOUT !== 'birlesik'){ LAYOUT = 'birlesik'; $('#duzen').value = 'birlesik'; } }
-  else if(LAYOUT === 'birlesik'){ LAYOUT = 'karakter'; $('#duzen').value = 'karakter'; }
-  S.pts = {mouth:null, eyeL:null, eyeR:null};
-  S.crop = null;
-  const had = loadSaved();
-  if(had && S.pts.mouth){
-    if(S.crop) S.ch = cropImg(S.ch, S.crop); else { autoFrame(); save(); }
-    badge('Yüz hazır (kayıtlı ayarlar)', 'ok'); sampleSkin(); prepComposite(); still(); return;
+/* Otomatik farklılaştırma: aynı kaynak resimden her seferinde farklı ışık, ton, kadraj ve yön */
+function varyasyon(img, seed){
+  const r = rng(seed), w = img.width, h = img.height, c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d'), sec = a => a[Math.floor(r()*a.length)];
+  const z = 1 + r()*.12, dx = (w - w*z)/2 + (r() - .5)*(w*z - w), dy = (h - h*z)/2 + (r() - .5)*(h*z - h)*.5;
+  g.filter = sec(['brightness(1.04) saturate(1.08) sepia(.10)', 'brightness(.98) saturate(.92) hue-rotate(-6deg)', 'contrast(1.08) saturate(1.12)',
+                  'brightness(1.06) contrast(.95) saturate(.9) sepia(.18)', 'saturate(1.15) hue-rotate(5deg)', 'contrast(1.12) brightness(.96) saturate(.85)']);
+  g.save(); if(r() < .5){ g.translate(w, 0); g.scale(-1, 1); } g.drawImage(img, dx, dy, w*z, h*z); g.restore(); g.filter = 'none';
+  const ton = sec(['255,190,120', '255,220,180', '180,210,255', '255,170,150']), lx = r() < .5 ? 0 : w;
+  const lg = g.createRadialGradient(lx, h*r()*.6, 0, lx, h*.3, w*.7); lg.addColorStop(0, `rgba(${ton},${(.10 + r()*.12).toFixed(2)})`); lg.addColorStop(1, `rgba(${ton},0)`);
+  g.fillStyle = lg; g.fillRect(0, 0, w, h);
+  return c;
+}
+let KAYNAK = null;   // farklılaştırma için orijinal dosya
+async function karakterYukle(f, opt = {}){
+  const fark = opt.fark ?? $('#fark').checked;
+  KAYNAK = f; $('#btnVar').disabled = false;
+  let img = await loadImg(f), dosya = f, ad = f.name;
+  if(fark){
+    const seed = opt.seed || Math.floor(Math.random()*1e9);
+    img = varyasyon(img, seed);
+    const blob = await new Promise(r => img.toBlob(r, 'image/jpeg', .92));
+    ad = f.name.replace(/\.[^.]+$/, '') + '_v' + seed + '.jpg'; dosya = new File([blob], ad, { type:'image/jpeg' });
   }
-  still();
-  badge('Yüz aranıyor...');
+  S.chFile = dosya; S.ch = img; S.chOrig = img; S.chName = ad;
+  if(LAYOUT === 'karakter') { LAYOUT = 'birlesik'; $('#duzen').value = 'birlesik'; }
+  const m = (f.name || '').match(/\d+_(\d+)_(kadin|erkek)/i);
+  if(m){ S.gender = m[2].toLowerCase() === 'kadin' ? 'Kadın' : 'Erkek'; S.age = +m[1];
+    $('#cinsiyet').value = S.gender; $('#yas').value = S.age; $('#yasYaz').textContent = S.age; updTon(); }
+  S.pts = {mouth:null, eyeL:null, eyeR:null}; S.crop = null;
+  const had = loadSaved();
+  if(had && S.pts.mouth){ badge('Yüz hazır (kayıtlı ayarlar)', 'ok'); sampleSkin(); prepComposite(); still(); return true; }
+  still(); badge('Yüz aranıyor...');
   const ok = await detectFace(S.ch);
-  if(ok){ autoFrame(); badge('Yüz otomatik bulundu', 'ok'); sampleSkin(); save(); }
-  else { badge('Yüz bulunamadı, elle işaretle', 'warn'); $('#elle').open = true; }
-  prepComposite();
-  still();
-};
+  if(ok){ badge('Yüz otomatik bulundu', 'ok'); sampleSkin(); save(); }
+  else { badge('Yüz bulunamadı, elle işaretle', 'warn'); if(!opt.sessiz) $('#elle').open = true; }
+  prepComposite(); still();
+  return ok;
+}
+$('#fChar').onchange = e => { const f = e.target.files[0]; if(f) karakterYukle(f); };
+$('#btnVar').onclick = () => { if(KAYNAK) karakterYukle(KAYNAK, { fark:true }); };
 $('#fBg').onchange = async e => { const f = e.target.files[0]; if(!f) return; S.bgFile = f; S.bg = await loadImg(f); prepComposite(); still(); };
 $('#fAudio').onchange = e => { S.audioFile = e.target.files[0] || null; };
 
@@ -362,7 +412,7 @@ function autoFrame(){
 }
 
 /* ================= EKRAN GÖRÜNTÜLERİ VE KAYITLARI ================= */
-let MEDIA = [], LAYOUT = 'karakter';
+let MEDIA = [], LAYOUT = 'birlesik';
 const blurC = document.createElement('canvas'); blurC.width = 48; blurC.height = 27;
 const blurX = blurC.getContext('2d');
 async function loadMedia(file){
@@ -465,14 +515,17 @@ function drawMediaLayer(mi){
   if(mi.prev >= 0) drawMediaOne(MEDIA[mi.prev], 1.05, 1);
   drawMediaOne(MEDIA[mi.k], kb(MEDIA[mi.k]), mi.prev >= 0 ? mi.fade : 1);
 }
+const pipBox = () => { const w = W*.27, h = w*1.1; return { x: W - w - W*.02, y: H - h - H*.05, w, h }; };
 function rect(bob = 0, br = 1){
   if(LAYOUT === 'birlesik'){
     const k = Math.max(W/S.ch.width, H/S.ch.height)*1.03*br, w = S.ch.width*k, h = S.ch.height*k;
     return { x:(W - w)/2, y:(H - h)/2 + bob*.25, w, h };
   }
   if(LAYOUT === 'ekran' && MEDIA.length){
-    const h = H*.62*br, w = h*S.ch.width/S.ch.height;
-    return { x: W - w - W*.015, y: H - h + H*.012 + bob, w, h };
+    const b = pipBox(), p = facePoint();
+    const ed = S.pts.eyeL && S.pts.eyeR ? Math.abs(S.pts.eyeR.x - S.pts.eyeL.x) : .08;
+    const k = b.w/(ed*4.6*S.ch.width)*br, w = S.ch.width*k, h = S.ch.height*k;
+    return { x: b.x + b.w/2 - p.x*w, y: b.y + b.h*.45 - p.y*h + bob*.3, w, h };
   }
   const h = H*.92*S.scale*br, w = h*S.ch.width/S.ch.height;
   return { x: W/2 - w/2 + S.off*W, y: H - h + H*.012 + bob, w, h };
@@ -512,7 +565,9 @@ function draw(fr){
     const r = rect(bob, 1 + Math.sin(T*1.8)*.003 + pop);
     const px = r.x + r.w/2, py = r.y + r.h, sep = LAYOUT === 'karakter' || LAYOUT === 'ekran';
     ctx.save();
-    if(LAYOUT !== 'birlesik'){ ctx.translate(px, py); ctx.rotate(rot); ctx.translate(-px, -py); }
+    const pip = LAYOUT === 'ekran' && useMedia;
+    if(pip){ const b = pipBox(); ctx.beginPath(); ctx.roundRect(b.x, b.y, b.w, b.h, W*.02); ctx.clip(); }
+    else if(LAYOUT !== 'birlesik'){ ctx.translate(px, py); ctx.rotate(rot); ctx.translate(-px, -py); }
     if(sep && S.shadow && !useMedia){
       const sx = r.w/S.ch.width, pd = S.shadow.pad*sx;
       ctx.globalAlpha = .38; ctx.drawImage(S.shadow.c, r.x - pd + r.w*.012, r.y - pd + r.h*.006, r.w + pd*2, r.h + pd*2); ctx.globalAlpha = 1;
@@ -550,6 +605,7 @@ function draw(fr){
       }
     }
     ctx.restore();
+    if(pip){ const b = pipBox(); ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.beginPath(); ctx.roundRect(b.x, b.y, b.w, b.h, W*.02); ctx.stroke(); }
   }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   if(warm > .01){ ctx.fillStyle = `rgba(255,170,80,${.08*warm})`; ctx.fillRect(0, 0, W, H); }
@@ -843,7 +899,7 @@ async function ensureVoice(){
     const kelime = segs.reduce((n, g) => n + g.text.split(/\s+/).length, 0);
     if(kelime > 20){
       const oran = buf.duration/(kelime/2.3);
-      if((oran < .55 || oran > 1.8) && !confirm(`Dikkat: Ses kaydı ${Math.round(buf.duration)} saniye ama senaryo yaklaşık ${Math.round(kelime/2.3)} saniyelik. Ses kaydı bu senaryoya ait olmayabilir. Yine de devam edilsin mi?`))
+      if((oran < .55 || oran > 1.8) && !TOPLU && !confirm(`Dikkat: Ses kaydı ${Math.round(buf.duration)} saniye ama senaryo yaklaşık ${Math.round(kelime/2.3)} saniyelik. Ses kaydı bu senaryoya ait olmayabilir. Yine de devam edilsin mi?`))
         throw new Error('Ses kaydı ile senaryo uyuşmuyor. Doğru ses dosyasını seç');
     }
   } else {
@@ -1260,7 +1316,8 @@ $('#btnSil').onclick = async () => {
   showBanner(); say('Kayıtlı iş silindi.');
 };
 
-async function produce(resumeJob){
+let TOPLU = false;
+async function produce(resumeJob, toplu){
   keepAlive(true);                 // dokunuş anında başlamalı: sekmeyi arka planda canlı tutar
   if(!S.ch && LAYOUT !== 'sadece'){ keepAlive(false); return say('Önce karakter görselini seç.'); }
   let job = resumeJob || null;
@@ -1269,7 +1326,7 @@ async function produce(resumeJob){
     const sig = signature();
     if(old && old.sig === sig && old.stage !== 'bitti') job = old;
     else {
-      if(old && old.stage !== 'bitti' && !confirm('Yarım kalan başka bir video var. Silinip bu video başlatılsın mı?')){ keepAlive(false); return; }
+      if(old && old.stage !== 'bitti' && !toplu && !confirm('Yarım kalan başka bir video var. Silinip bu video başlatılsın mı?')){ keepAlive(false); return null; }
       if(old) await clearJob(old);
       job = { id:'is' + Date.now(), sig, created:Date.now(), stage:'ses', partsDone:0, totalParts:0,
               seed: Math.floor(Math.random()*1e9), title:$('#baslik').value.trim(), text:$('#metin').value,
@@ -1304,10 +1361,12 @@ async function produce(resumeJob){
         (SKIPPED.length ? ` Uyarı: ${SKIPPED.length} cümle seslendirilemedi ve yerine kısa sessizlik kondu: "${SKIPPED[0].slice(0, 50)}..."` : ''));
     notifyState('✅ Video hazır - Sahnely');
     keepAlive(false); chime();
+    return out.blob;
   }catch(e){
     say((e.message === 'Durduruldu' ? 'Durduruldu.' : 'Video üretilemedi: ' + (e.message || e)) + ' Kaldığı yerden devam edebilirsin.');
     notifyState('⚠️ Durdu - Sahnely');
     keepAlive(false); try{ navigator.vibrate && navigator.vibrate(600); }catch(_){}
+    return null;
   }finally{
     keepAlive(false); stopVideos(); running = false; lock(false); still(); showBanner();
   }
@@ -1337,9 +1396,109 @@ $('#cozunurluk').onchange = e => { const [w, h] = e.target.value.split('x').map(
 updTon(); still();
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
+
+/* ================= KÜTÜPHANE ================= */
+let KUT = null;
+async function kutuphaneListe(){
+  try{ const r = await fetch('kutuphane/kutuphane.json', { cache:'no-store' });
+    if(r.ok) return (await r.json()).map(x => typeof x === 'string' ? { ad:x, url:'kutuphane/' + x } : x); }catch(e){}
+  const owner = location.hostname.split('.')[0], repo = location.pathname.split('/').filter(Boolean)[0];
+  const r = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/kutuphane`);
+  if(!r.ok) throw new Error('Kütüphane klasörü bulunamadı');
+  return (await r.json()).filter(f => /\.(png|jpe?g|webp)$/i.test(f.name)).map(f => ({ ad:f.name, url:'kutuphane/' + f.name }));
+}
+function kutuphaneCiz(){
+  const izg = $('#kIzgara'); izg.innerHTML = '';
+  const cins = $('#kCins').value, yas = $('#kYas').value.split('-').map(Number);
+  const liste = (KUT || []).filter(x => { const m = x.ad.match(/\d+_(\d+)_(kadin|erkek)/i);
+    if(!m) return !cins && !yas[0]; if(cins && m[2].toLowerCase() !== cins) return false;
+    if(yas[0] && (+m[1] < yas[0] || +m[1] > yas[1])) return false; return true; });
+  $('#kDurum').textContent = liste.length ? `${liste.length} sahne` : 'Bu filtreye uyan sahne yok.';
+  for(const x of liste){
+    const im = document.createElement('img'); im.src = x.url; im.loading = 'lazy'; im.alt = x.ad;
+    im.style.cssText = 'width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px;cursor:pointer';
+    im.onclick = async () => {
+      $('#kDurum').textContent = 'Yükleniyor...';
+      try{ const b = await (await fetch(x.url)).blob(); $('#kutDlg').close();
+        await karakterYukle(new File([b], x.ad, { type:b.type || 'image/png' }), { fark:$('#fark').checked }); }
+      catch(e){ $('#kDurum').textContent = 'Açılamadı: ' + e.message; }
+    };
+    izg.appendChild(im);
+  }
+}
+$('#btnKut').onclick = async () => {
+  $('#kutDlg').showModal();
+  if(!KUT){ $('#kDurum').textContent = 'Kütüphane yükleniyor...';
+    try{ KUT = await kutuphaneListe(); }catch(e){ KUT = []; $('#kDurum').textContent = 'Kütüphane henüz boş. GitHub deposunda "kutuphane" klasörüne sahne resimlerini yükle.'; return; } }
+  kutuphaneCiz();
+};
+$('#kCins').onchange = kutuphaneCiz; $('#kYas').onchange = kutuphaneCiz; $('#kKapat').onclick = () => $('#kutDlg').close();
+
+/* ================= TOPLU ÜRETİM ================= */
+let ROWS = [], topluDur = false;
+const kok = n => (n || '').replace(/\.[^.]+$/, '').replace(/\s*\(\d+\)$/, '').trim().toLowerCase();
+function topluCiz(){
+  const k = $('#tListe');
+  if(!ROWS.length){ k.innerHTML = '<p class="hint">Henüz dosya seçilmedi.</p>'; return; }
+  k.innerHTML = '';
+  for(const r of ROWS){
+    const d = document.createElement('div');
+    d.style.cssText = 'display:flex;gap:8px;align-items:center;justify-content:space-between;padding:8px 10px;border:1px solid var(--line);border-radius:12px;margin-top:6px';
+    const eksik = [!r.img && 'resim', !r.ses && 'ses'].filter(Boolean);
+    const durum = r.durum === 'bitti' ? '✅ bitti' : r.durum === 'calisiyor' ? '⏳ üretiliyor' : r.durum === 'hata' ? '⚠️ ' + (r.not || 'hata')
+                : eksik.length ? '✖ ' + eksik.join(', ') + ' eksik' : (r.txt ? 'hazır' : 'hazır (altyazısız)');
+    d.innerHTML = `<span style="font-weight:700;overflow:hidden;text-overflow:ellipsis">${r.ad}</span><span class="hint" style="margin:0;white-space:nowrap">${durum}</span>`;
+    if(r.url){ const a = document.createElement('a'); a.href = r.url; a.download = r.ad + '.mp4'; a.textContent = 'İndir'; a.style.color = 'var(--ok)'; d.appendChild(a); }
+    k.appendChild(d);
+  }
+}
+async function topluKaydet(){ try{ await DB.put('jobs', 'toplu', { rows: ROWS.map(({ url, ...x }) => x) }); }catch(e){} }
+async function topluEkle(files, alan){
+  for(const f of files){
+    const ad = kok(f.name); let r = ROWS.find(x => x.ad === ad);
+    if(!r){ r = { ad, durum:'' }; ROWS.push(r); }
+    if(alan === 'txt') r.txt = (await f.text()).replace(/\r/g, '').trim(); else r[alan] = f;
+    if(r.durum === 'bitti') r.durum = '';
+  }
+  ROWS.sort((a, b) => a.ad.localeCompare(b.ad, 'tr', { numeric:true }));
+  topluCiz(); topluKaydet();
+}
+$('#tResim').onchange = e => topluEkle(e.target.files, 'img');
+$('#tSes').onchange = e => topluEkle(e.target.files, 'ses');
+$('#tMetin').onchange = e => topluEkle(e.target.files, 'txt');
+$('#tTemizle').onclick = async () => { if(running) return; ROWS = []; topluCiz(); try{ await DB.del('jobs', 'toplu'); }catch(e){} $('#tDurum').textContent = ''; };
+$('#tDur').onclick = () => { topluDur = true; running = false; $('#tDurum').textContent = 'Durduruluyor...'; };
+$('#tBasla').onclick = async () => {
+  if(running) return;
+  const sira = ROWS.filter(r => r.durum !== 'bitti' && r.img && r.ses);
+  if(!sira.length){ $('#tDurum').textContent = 'Üretilecek video yok. Her satırda en az resim ve ses olmalı.'; return; }
+  keepAlive(true); TOPLU = true; topluDur = false; $('#tBasla').disabled = true; $('#tDur').disabled = false;
+  let n = 0;
+  for(const r of sira){
+    if(topluDur) break;
+    n++; r.durum = 'calisiyor'; topluCiz(); $('#tDurum').textContent = `${n} / ${sira.length}: ${r.ad}`;
+    try{
+      const ok = await karakterYukle(r.img, { fark:$('#tFark').checked, sessiz:true, seed:([...r.ad].reduce((h, c) => (h*31 + c.charCodeAt(0)) | 0, 7) >>> 0) || 1 });
+      if(!ok){ r.durum = 'hata'; r.not = 'yüz bulunamadı'; topluCiz(); await topluKaydet(); continue; }
+      S.audioFile = r.ses; $('#kaynak').value = 'dosya'; $('#kaynak').onchange({ target:$('#kaynak') }); $('#tonAuto').checked = true;
+      $('#metin').value = r.txt || ''; $('#baslik').value = ''; AUD = null;
+      const blob = await produce(null, true);
+      if(blob){ r.durum = 'bitti'; r.url = URL.createObjectURL(blob); }
+      else if(topluDur){ r.durum = ''; }
+      else { r.durum = 'hata'; r.not = 'üretilemedi'; }
+    }catch(e){ r.durum = 'hata'; r.not = e.message; }
+    topluCiz(); await topluKaydet();
+  }
+  TOPLU = false; keepAlive(false); $('#tBasla').disabled = false; $('#tDur').disabled = true;
+  const biten = ROWS.filter(r => r.durum === 'bitti').length;
+  $('#tDurum').textContent = topluDur ? `Durduruldu. ${biten} video bitti; "Hepsini üret" ile kaldığı yerden devam eder.` : `Tamamlandı: ${biten} / ${ROWS.length} video hazır.`;
+  notifyState(topluDur ? 'Sahnely' : `✅ ${biten} video hazır - Sahnely`);
+};
+(async () => { try{ const t = await DB.get('jobs', 'toplu'); if(t && t.rows){ ROWS = t.rows; topluCiz(); } else topluCiz(); }catch(e){ topluCiz(); } })();
+
 /* 2B Stüdyo ile köprü */
 function sekme(n){
-  $('#tabVideo').classList.toggle('gizli', n !== 'video'); $('#tab2b').classList.toggle('gizli', n !== '2b');
+  $('#tabVideo').classList.toggle('gizli', n !== 'video'); $('#tab2b').classList.toggle('gizli', n !== '2b'); $('#tabToplu').classList.toggle('gizli', n !== 'toplu');
   document.querySelectorAll('[data-sekme]').forEach(b => b.classList.toggle('on', b.dataset.sekme === n));
   window.scrollTo({ top:0 });
 }
