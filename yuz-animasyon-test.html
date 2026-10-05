@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sahnely – Yüz animasyonu testi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F3EFF7;--panel:#FFFFFF;--ink:#2A2340;--muted:#6E6787;--accent:#7A1F3D;--glow:#F2B544;--line:#DCD4E8;
+  color-scheme:light dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1D1B2E;--panel:#282541;--ink:#EDE8F6;--muted:#A9A2C0;--accent:#C2456E;--line:#3A3658}}
+:root[data-theme="dark"]{--bg:#1D1B2E;--panel:#282541;--ink:#EDE8F6;--muted:#A9A2C0;--accent:#C2456E;--line:#3A3658}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:"Baloo 2",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:17px;line-height:1.45}
+header,main,footer{max-width:560px;margin:0 auto;padding:0 16px}
+header{padding-top:18px}
+h1{font-size:2.5rem;font-weight:800;margin:0;line-height:1;color:var(--accent)}
+header p{margin:.3rem 0 1rem;color:var(--muted);max-width:40ch}
+.stage{padding:12px;border-radius:30px 30px 14px 14px;
+  background:radial-gradient(120% 70% at 50% 0%,rgba(242,181,68,.55),rgba(242,181,68,0) 70%),var(--accent)}
+.screen{position:relative;background:#000;border-radius:20px 20px 6px 6px;overflow:hidden;display:grid;place-items:center;min-height:300px}
+.screen.empty{aspect-ratio:3/4;min-height:0}
+canvas{display:block;max-width:100%;max-height:68vh;width:auto;height:auto}
+#empty{position:absolute;color:#cfc6e3;padding:20px;text-align:center}
+#status{margin:10px 2px 0;color:var(--muted);min-height:1.5em}
+#status.err{color:var(--accent);font-weight:600}
+.pick{position:relative;display:flex;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:12px 14px;margin-top:10px;cursor:pointer}
+.pick .n{flex:none;width:34px;height:34px;border-radius:50%;background:var(--glow);color:#2A2340;display:grid;place-items:center;font-weight:800}
+.pick b{display:block}
+.pick small{display:block;color:var(--muted);overflow-wrap:anywhere}
+.pick input{position:absolute;opacity:0;width:1px;height:1px}
+.pick:focus-within{outline:3px solid var(--glow);outline-offset:2px}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+button,.dl{font:inherit;font-weight:600;border:0;border-radius:14px;padding:12px;min-height:48px;cursor:pointer}
+button:focus-visible,.dl:focus-visible,summary:focus-visible{outline:3px solid var(--glow);outline-offset:2px}
+#playBtn{background:var(--accent);color:#fff}
+#recBtn{background:var(--panel);color:var(--ink);border:2px solid var(--accent)}
+button:disabled{opacity:.45;cursor:default}
+.dl{display:block;text-align:center;background:var(--glow);color:#2A2340;text-decoration:none;margin-top:10px}
+details{margin:14px 0;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:10px 14px}
+summary{font-weight:600;cursor:pointer}
+.row{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-top:10px}
+.row span{flex:none;width:8.5em}
+input[type=range]{flex:1;accent-color:var(--accent)}
+input[type=checkbox]{width:22px;height:22px;accent-color:var(--accent)}
+footer{color:var(--muted);font-size:.85rem;padding-bottom:24px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Sahnely</h1>
+  <p>Yüz animasyonu testi. Resmi ve sesi ver; yüzü kendisi bulur, ağzı ve gözleri konuşmaya göre oynatır.</p>
+</header>
+<main>
+  <section class="stage">
+    <div class="screen empty" id="screen">
+      <canvas id="out" width="2" height="2" aria-label="Karakter önizlemesi"></canvas>
+      <div id="empty">Karakter resmi bekleniyor</div>
+    </div>
+  </section>
+  <p id="status" role="status">Yüz modeli yükleniyor…</p>
+
+  <label class="pick"><span class="n">1</span>
+    <span><b>Karakter resmi seç</b><small id="imgName">Kameraya önden bakan, yüzü net bir resim</small></span>
+    <input type="file" id="imgIn" accept="image/*">
+  </label>
+  <label class="pick"><span class="n">2</span>
+    <span><b>Ses dosyası seç</b><small id="audName">Karakterin anlatım kaydı (mp3, m4a, wav)</small></span>
+    <input type="file" id="audIn" accept="audio/*">
+  </label>
+
+  <div class="actions">
+    <button id="playBtn" disabled>Oynat</button>
+    <button id="recBtn" disabled>Videoyu kaydet</button>
+  </div>
+  <a id="dl" class="dl" hidden>Videoyu indir</a>
+
+  <details>
+    <summary>Ayarlar</summary>
+    <div class="row"><span>Ağız açıklığı</span><input type="range" id="mouthSl" min="0.5" max="1.6" step="0.05" value="1"></div>
+    <div class="row"><span>Kafa hareketi</span><input type="range" id="headSl" min="0" max="2" step="0.1" value="1"></div>
+    <div class="row"><span>Göz kırpma</span><input type="checkbox" id="blinkChk" checked></div>
+    <div class="row"><span>Yüz noktalarını göster</span><input type="checkbox" id="ptsChk"></div>
+  </details>
+</main>
+<footer>Yüz algılama: Google MediaPipe Face Landmarker (Apache 2.0). Kayıt sırasında ekranı açık tut.</footer>
+
+<script type="module">
+const $ = id => document.getElementById(id);
+const statusEl = $('status');
+const setStatus = (t, err) => { statusEl.textContent = t; statusEl.classList.toggle('err', !!err); };
+const ss = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+/* ---------- Yüz noktası grupları (MediaPipe 478 nokta) ---------- */
+const UPPER_INNER = [191,80,81,82,13,312,311,310,415];
+const LOWER_INNER = [324,318,402,317,14,87,178,88,95];
+const UPPER_OUTER = [185,40,39,37,0,267,269,270,409];
+const LOWER_OUTER = [375,321,405,314,17,84,181,91,146];
+const CORNERS = [61,291,78,308];
+const INNER_CONTOUR = [78,191,80,81,82,13,312,311,310,415,308,324,318,402,317,14,87,178,88,95];
+const EYES = [{a:33,b:133,up:159,dn:145},{a:362,b:263,up:386,dn:374}];
+
+/* ---------- Model ---------- */
+let landmarker = null, pendingImg = null;
+const VER = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+async function loadModel(){
+  try{
+    let mod = null;
+    for (const u of [VER + '/vision_bundle.mjs', VER, VER + '/+esm']){
+      try{ mod = await import(u); if (mod.FaceLandmarker || (mod.default && mod.default.FaceLandmarker)) break; }catch(e){ mod = null; }
+    }
+    if (!mod) throw new Error('modül yok');
+    const V = mod.FaceLandmarker ? mod : mod.default;
+    const files = await V.FilesetResolver.forVisionTasks(VER + '/wasm');
+    landmarker = await V.FaceLandmarker.createFromOptions(files, {
+      baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task', delegate: 'CPU' },
+      runningMode: 'IMAGE', numFaces: 1
+    });
+    if (pendingImg) processImage(pendingImg); else setStatus('Hazır. Karakter resmini seç.');
+  }catch(e){
+    console.error(e);
+    setStatus('Yüz modeli yüklenemedi. İnternet bağlantısını kontrol edip sayfayı yenile.', true);
+  }
+}
+loadModel();
+
+/* ---------- Delaunay üçgenleme ---------- */
+function delaunay(pts){
+  const n = pts.length; let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  for (const p of pts){ x0=Math.min(x0,p[0]); y0=Math.min(y0,p[1]); x1=Math.max(x1,p[0]); y1=Math.max(y1,p[1]); }
+  const dm = Math.max(x1-x0, y1-y0) * 20, mx=(x0+x1)/2, my=(y0+y1)/2;
+  const P = pts.concat([[mx-dm,my-dm],[mx,my+dm],[mx+dm,my-dm]]);
+  const mk = (a,b,c) => {
+    const [ax,ay]=P[a],[bx,by]=P[b],[cx,cy]=P[c];
+    const D = 2*(ax*(by-cy)+bx*(cy-ay)+cx*(ay-by));
+    if (Math.abs(D) < 1e-12) return {a,b,c,x:0,y:0,r2:Infinity};
+    const a2=ax*ax+ay*ay,b2=bx*bx+by*by,c2=cx*cx+cy*cy;
+    const ux=(a2*(by-cy)+b2*(cy-ay)+c2*(ay-by))/D, uy=(a2*(cx-bx)+b2*(ax-cx)+c2*(bx-ax))/D;
+    return {a,b,c,x:ux,y:uy,r2:(ax-ux)**2+(ay-uy)**2};
+  };
+  let tris = [mk(n,n+1,n+2)];
+  for (let i=0;i<n;i++){
+    const [px,py]=P[i], keep=[], edges=new Map();
+    for (const t of tris){
+      const dx=px-t.x, dy=py-t.y;
+      if (dx*dx+dy*dy < t.r2){
+        for (const [u,v] of [[t.a,t.b],[t.b,t.c],[t.c,t.a]]){
+          const k = u<v ? u+','+v : v+','+u;
+          edges.has(k) ? edges.set(k,null) : edges.set(k,[u,v]);
+        }
+      } else keep.push(t);
+    }
+    for (const e of edges.values()) if (e) keep.push(mk(e[0],e[1],i));
+    tris = keep;
+  }
+  return tris.filter(t=>t.a<n&&t.b<n&&t.c<n).map(t=>[t.a,t.b,t.c]);
+}
+function pointInPoly(x,y,poly){
+  let inside=false;
+  for (let i=0,j=poly.length-1;i<poly.length;j=i++){
+    const [xi,yi]=poly[i],[xj,yj]=poly[j];
+    if ((yi>y)!==(yj>y) && x < (xj-xi)*(y-yi)/(yj-yi)+xi) inside=!inside;
+  }
+  return inside;
+}
+
+/* ---------- Resim -> iskelet (rig) ---------- */
+let rig = null;
+$('imgIn').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  $('imgName').textContent = f.name;
+  const img = new Image(); img.src = URL.createObjectURL(f);
+  try{ await img.decode(); }catch{ setStatus('Bu resim açılamadı. JPG veya PNG dene.', true); return; }
+  if (!landmarker){ pendingImg = img; setStatus('Yüz modeli yükleniyor, resim sırada…'); return; }
+  processImage(img);
+};
+function processImage(img){
+  pendingImg = null;
+  setStatus('Yüz aranıyor…');
+  setTimeout(()=>{
+    let res;
+    try{ res = landmarker.detect(img); }catch(err){ console.error(err); setStatus('Yüz aranırken hata oldu. Başka bir resim dene.', true); return; }
+    const lm = res && res.faceLandmarks && res.faceLandmarks[0];
+    if (!lm){ setStatus('Bu resimde yüz bulunamadı. Karakter kameraya önden bakmalı ve yüzü net görünmeli.', true); return; }
+    buildRig(img, lm);
+    setStatus(anim ? 'Yüz bulundu. Oynat veya videoyu kaydet.' : 'Yüz bulundu. Şimdi ses dosyasını seç.');
+    updateButtons();
+  }, 30);
+}
+
+function buildRig(img, lm){
+  const sc = Math.min(1, 1080/Math.max(img.naturalWidth, img.naturalHeight));
+  const cw = Math.max(2, Math.round(img.naturalWidth*sc/2)*2), ch = Math.max(2, Math.round(img.naturalHeight*sc/2)*2);
+  const tex = document.createElement('canvas'); tex.width=cw; tex.height=ch;
+  tex.getContext('2d').drawImage(img,0,0,cw,ch);
+
+  const P = lm.map(p=>[p.x*cw, p.y*ch]); const nF = P.length;
+  const sub=(a,b)=>[a[0]-b[0],a[1]-b[1]], dot=(a,b)=>a[0]*b[0]+a[1]*b[1], len=a=>Math.hypot(a[0],a[1]);
+  const top=P[10], chin=P[152];
+  const H = len(sub(chin,top)); const d=[(chin[0]-top[0])/H,(chin[1]-top[1])/H]; const r=[d[1],-d[0]];
+  const M = [(P[13][0]+P[14][0])/2,(P[13][1]+P[14][1])/2];
+  const W = len(sub(P[291],P[61]));
+
+  // Yardımcı noktalar: yüz çevresi halkaları + resim kenarları
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  for (const p of P){ x0=Math.min(x0,p[0]); y0=Math.min(y0,p[1]); x1=Math.max(x1,p[0]); y1=Math.max(y1,p[1]); }
+  const cx=(x0+x1)/2, cy=(y0+y1)/2, hx=(x1-x0)/2, hy=(y1-y0)/2;
+  const pts = P.map(p=>[p[0],p[1]]), hw = new Array(nF).fill(1);
+  const m=4, inside=(x,y)=>x>m&&y>m&&x<cw-m&&y<ch-m;
+  const ring=(n,fx,fy,w)=>{ for(let i=0;i<n;i++){ const a=i/n*Math.PI*2, x=cx+Math.cos(a)*hx*fx, y=cy+Math.sin(a)*hy*fy; if(inside(x,y)){pts.push([x,y]);hw.push(w);} } };
+  ring(28,1.45,1.35,0.55); ring(32,2.1,1.9,0.18);
+  const NB=8; for(let i=0;i<NB;i++){ const t=i/NB; pts.push([t*cw,0],[cw,t*ch],[cw-t*cw,ch],[0,ch-t*ch]); hw.push(0,0,0,0); }
+  const n = pts.length;
+
+  // Hareket katsayıları
+  const oS=new Float32Array(n), wS=new Float32Array(n), b0=new Float32Array(n), b1=new Float32Array(n), brS=new Float32Array(n);
+  const setU=new Set(UPPER_INNER.concat(UPPER_OUTER)), setL=new Set(LOWER_INNER.concat(LOWER_OUTER)), setC=new Set(CORNERS);
+  const A = H*0.085;
+  for (let i=0;i<nF;i++){
+    const q=sub(P[i],M), u=dot(q,r)/W, v=dot(q,d)/H, au=Math.abs(u);
+    const wu = 1-ss(0.7,2.0,au), lipFall = 1-0.55*ss(0.1,0.5,au);
+    let jaw=0, up=0;
+    if (setC.has(i)) jaw=0.45;
+    else if (setL.has(i)) jaw=lipFall;
+    else if (setU.has(i)) up=lipFall;
+    else if (v>0) jaw=wu*ss(-0.005,0.05,v);
+    else up=wu*(1-ss(0.02,0.1,-v))*0.7;
+    oS[i] = A*(jaw-0.22*up);
+    const vm = v*H/W;
+    wS[i] = u*W*0.35*Math.exp(-(u*u+vm*vm)/0.5);
+  }
+  let EwSum=0;
+  EYES.forEach((E,k)=>{
+    const C=[(P[E.a][0]+P[E.b][0])/2,(P[E.a][1]+P[E.b][1])/2], Ew=len(sub(P[E.b],P[E.a])); EwSum+=Ew;
+    const lidU=Math.max(0.08,-dot(sub(P[E.up],C),d)/Ew), lidD=Math.max(0.04,dot(sub(P[E.dn],C),d)/Ew);
+    const meet=lidD*0.4, D0=meet+lidU-0.02, wid=Math.max(0.45,1.6*D0), Dl=meet+0.02-lidD;
+    const arr = k? b1 : b0;
+    for (let i=0;i<nF;i++){
+      const q=sub(P[i],C), ex=dot(q,r)/Ew, ey=dot(q,d)/Ew, wx=1-ss(0.42,0.72,Math.abs(ex));
+      let dy;
+      if (ey<=meet && ey>=-lidU) dy = (meet-(meet-ey)/(meet+lidU)*0.02)-ey;
+      else if (ey<-lidU) dy = D0*(1-ss(lidU,lidU+wid,-ey));
+      else if (ey<=lidD) dy = (meet+(ey-meet)/Math.max(1e-3,lidD-meet)*0.02)-ey;
+      else dy = Dl*(1-ss(lidD,lidD+0.3,ey));
+      arr[i] = dy*Ew*wx;
+      const br = -Ew*0.13*(1-ss(0.55,1.0,Math.abs(ex)))*Math.exp(-(((ey+0.7)/0.32)**2));
+      brS[i] = Math.min(brS[i], br);
+    }
+  });
+
+  // Üçgenler + ağız içi boşluğu
+  const jit = pts.map((p,i)=>[p[0]+((i*7919)%97)/97*0.01, p[1]+((i*104729)%89)/89*0.01]);
+  const tris = delaunay(jit);
+  const openPos = pts.map((p,i)=>[p[0]+d[0]*oS[i], p[1]+d[1]*oS[i]]);
+  const innerSet = new Set(INNER_CONTOUR), poly = INNER_CONTOUR.map(k=>openPos[k]);
+  const idx = [];
+  for (const t of tris){
+    if (t.every(k=>innerSet.has(k))){
+      const gx=(openPos[t[0]][0]+openPos[t[1]][0]+openPos[t[2]][0])/3, gy=(openPos[t[0]][1]+openPos[t[1]][1]+openPos[t[2]][1])/3;
+      if (pointInPoly(gx,gy,poly)) continue;
+    }
+    idx.push(t[0],t[1],t[2]);
+  }
+
+  const rest=new Float32Array(n*2), uv=new Float32Array(n*2);
+  pts.forEach((p,i)=>{ rest[2*i]=p[0]; rest[2*i+1]=p[1]; uv[2*i]=p[0]/cw; uv[2*i+1]=p[1]/ch; });
+  rig = { cw, ch, n, nF, rest, uv, oS, wS, b0, b1, brS, hw:Float32Array.from(hw), d, r, H, W, Ew:EwSum/2,
+          pivot:[chin[0]+d[0]*H*0.3, chin[1]+d[1]*H*0.3], idx:new Uint16Array(idx), pos:new Float32Array(n*2), tex };
+  initGL(rig);
+  const out=$('out'); out.width=cw; out.height=ch;
+  $('screen').classList.remove('empty'); $('empty').hidden=true;
+}
+
+/* ---------- WebGL çizim ---------- */
+function initGL(R){
+  const c=document.createElement('canvas'); c.width=R.cw; c.height=R.ch;
+  const gl=c.getContext('webgl',{alpha:true,premultipliedAlpha:true,preserveDrawingBuffer:true,antialias:true});
+  const sh=(type,src)=>{ const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s); return s; };
+  const prog=gl.createProgram();
+  gl.attachShader(prog,sh(gl.VERTEX_SHADER,`attribute vec2 aPos;attribute vec2 aUV;uniform vec2 uRes;varying vec2 vUV;
+    void main(){vec2 c=aPos/uRes*2.0-1.0;gl_Position=vec4(c.x,-c.y,0.0,1.0);vUV=aUV;}`));
+  gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,`precision mediump float;varying vec2 vUV;uniform sampler2D uTex;
+    void main(){gl_FragColor=texture2D(uTex,vUV);}`));
+  gl.linkProgram(prog); gl.useProgram(prog);
+  const posBuf=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,posBuf); gl.bufferData(gl.ARRAY_BUFFER,R.rest,gl.DYNAMIC_DRAW);
+  const aPos=gl.getAttribLocation(prog,'aPos'); gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos,2,gl.FLOAT,false,0,0);
+  const uvBuf=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,uvBuf); gl.bufferData(gl.ARRAY_BUFFER,R.uv,gl.STATIC_DRAW);
+  const aUV=gl.getAttribLocation(prog,'aUV'); gl.enableVertexAttribArray(aUV); gl.vertexAttribPointer(aUV,2,gl.FLOAT,false,0,0);
+  const ib=gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,R.idx,gl.STATIC_DRAW);
+  const tx=gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D,tx);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,true);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,R.tex);
+  gl.uniform2f(gl.getUniformLocation(prog,'uRes'),R.cw,R.ch);
+  R.gl=gl; R.glCanvas=c; R.posBuf=posBuf;
+}
+function drawGL(R){
+  const gl=R.gl; gl.viewport(0,0,R.cw,R.ch); gl.clearColor(0,0,0,0); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.bindBuffer(gl.ARRAY_BUFFER,R.posBuf); gl.bufferSubData(gl.ARRAY_BUFFER,0,R.pos);
+  gl.drawElements(gl.TRIANGLES,R.idx.length,gl.UNSIGNED_SHORT,0);
+}
+
+/* ---------- Ses analizi ---------- */
+function fft(re,im){
+  const n=re.length;
+  for(let i=1,j=0;i<n;i++){ let bit=n>>1; for(;j&bit;bit>>=1) j^=bit; j^=bit; if(i<j){ [re[i],re[j]]=[re[j],re[i]]; [im[i],im[j]]=[im[j],im[i]]; } }
+  for(let len=2;len<=n;len<<=1){
+    const ang=-2*Math.PI/len, wr=Math.cos(ang), wi=Math.sin(ang);
+    for(let i=0;i<n;i+=len){ let cr=1,ci=0;
+      for(let k=0;k<len/2;k++){ const a=i+k,b=a+len/2, tr=re[b]*cr-im[b]*ci, ti=re[b]*ci+im[b]*cr;
+        re[b]=re[a]-tr; im[b]=im[a]-ti; re[a]+=tr; im[a]+=ti; const t=cr*wr-ci*wi; ci=cr*wi+ci*wr; cr=t; } }
+  }
+}
+async function analyze(buf,onP){
+  const sr=buf.sampleRate, L=buf.length, chs=buf.numberOfChannels, mono=new Float32Array(L);
+  for(let c=0;c<chs;c++){ const dta=buf.getChannelData(c); for(let i=0;i<L;i++) mono[i]+=dta[i]/chs; }
+  const FPS=30, N=1024, F=Math.ceil(L/sr*FPS)+1;
+  const win=new Float32Array(N); for(let i=0;i<N;i++) win[i]=0.5-0.5*Math.cos(2*Math.PI*i/(N-1));
+  const re=new Float32Array(N), im=new Float32Array(N);
+  const rms=new Float32Array(F), lr=new Float32Array(F), sib=new Float32Array(F);
+  const bin=f=>Math.min(N/2-1,Math.round(f/(sr/N)));
+  const B=[bin(150),bin(900),bin(2500),bin(5000),bin(9000)];
+  for(let k=0;k<F;k++){
+    const s0=Math.round(k*sr/FPS)-N/2; let e=0;
+    for(let i=0;i<N;i++){ const x=(s0+i>=0&&s0+i<L)?mono[s0+i]:0; e+=x*x; re[i]=x*win[i]; im[i]=0; }
+    rms[k]=Math.sqrt(e/N); fft(re,im);
+    const band=(a,b)=>{ let s=0; for(let i=a;i<b;i++) s+=re[i]*re[i]+im[i]*im[i]; return s; };
+    const lo=band(B[0],B[1]), mid=band(B[1],B[2]), hi=band(B[2],B[3]), sb=band(B[3],B[4]);
+    lr[k]=Math.log((mid+hi+1e-9)/(lo+1e-9)); sib[k]=sb/(lo+mid+hi+sb+1e-9);
+    if(k%300===0){ onP(k/F); await new Promise(r=>setTimeout(r)); }
+  }
+  const sorted=Float32Array.from(rms).sort();
+  const pct=p=>sorted[Math.min(F-1,Math.floor(p*F))];
+  const peak=Math.max(1e-6,pct(0.97)), noise=pct(0.1), gate=noise+(peak-noise)*0.08;
+  const tgt=new Float32Array(F);
+  for(let k=0;k<F;k++) tgt[k]=Math.pow(Math.min(1,Math.max(0,(rms[k]-gate)/(peak*0.85-gate))),0.75);
+  const voiced=[]; for(let k=0;k<F;k++) if(tgt[k]>0.15) voiced.push(lr[k]);
+  voiced.sort((a,b)=>a-b);
+  const med=voiced.length?voiced[voiced.length>>1]:0;
+  const mad=voiced.length?voiced.map(x=>Math.abs(x-med)).sort((a,b)=>a-b)[voiced.length>>1]:1;
+  const open=new Float32Array(F), wide=new Float32Array(F), brow=new Float32Array(F), speak=new Float32Array(F);
+  let o=0,w=0,br=0,sp=0,slow=0,cool=0;
+  for(let k=0;k<F;k++){
+    let to=tgt[k], tw=Math.max(-1,Math.min(1,(lr[k]-med)/(Math.max(mad,0.05)*2)));
+    if(sib[k]>0.35 && rms[k]>gate*0.8){ to=Math.max(to*0.5,0.18); tw=0.7; }
+    o+=(to-o)*(to>o?0.7:0.45); w+=(tw-w)*0.35;
+    slow+=(rms[k]-slow)*0.05; cool--;
+    if(cool<=0 && rms[k]>slow*1.7 && rms[k]>peak*0.55){ br=1; cool=36; } else br*=0.9;
+    sp+=(o-sp)*0.04;
+    open[k]=o<0.03?0:o; wide[k]=w; brow[k]=br; speak[k]=sp;
+  }
+  return {FPS,open,wide,brow,speak,duration:buf.duration};
+}
+function sampleAnim(A,t){
+  const f=Math.max(0,t*A.FPS), i=Math.min(A.open.length-2,Math.floor(f)), a=Math.min(1,f-i);
+  const L=arr=>arr[i]+(arr[i+1]-arr[i])*a;
+  return {open:L(A.open),wide:L(A.wide),brow:L(A.brow),speak:L(A.speak)};
+}
+
+/* ---------- Doğal göz kırpma ve bakış ---------- */
+function rng(seed){ return ()=>{ seed|=0; seed=seed+0x6D2B79F5|0; let t=Math.imul(seed^seed>>>15,1|seed); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+const blinks=[], gazes=[];
+{ const R=rng(7); let t=1.2; while(t<3600){ blinks.push(t); if(R()<0.15) blinks.push(t+0.3); t+=2.5+R()*3.5; }
+  t=0; while(t<3600){ const big=R()<0.3; gazes.push([t,(R()-0.5)*(big?1.6:0.6),(R()-0.5)*(big?0.8:0.3)]); t+=1.5+R()*2.5; } }
+function lastIdx(arr,t,key){ let lo=0,hi=arr.length-1,ans=-1; while(lo<=hi){ const m=(lo+hi)>>1; if((key?arr[m][0]:arr[m])<=t){ans=m;lo=m+1;}else hi=m-1; } return ans; }
+function blinkAt(t){
+  const i=lastIdx(blinks,t); let v=0;
+  for(const j of [i,i-1]){ if(j<0) continue; const dt=t-blinks[j];
+    let b=dt<0.07?dt/0.07:dt<0.1?1:dt<0.25?1-ss(0,1,(dt-0.1)/0.15):0; v=Math.max(v,b); }
+  return v;
+}
+function gazeAt(t){
+  const i=Math.max(0,lastIdx(gazes,t,true)), g=gazes[i], p=gazes[Math.max(0,i-1)], k=ss(0,0.06,t-g[0]);
+  return [p[1]+(g[1]-p[1])*k, p[2]+(g[2]-p[2])*k];
+}
+
+/* ---------- Ağız içi (koyu boşluk, dişler, dil) ---------- */
+function drawMouth(ctx,pos){
+  const P=k=>[pos[2*k],pos[2*k+1]];
+  const [ax,ay]=P(78),[bx,by]=P(308), mw=Math.hypot(bx-ax,by-ay)||1, ang=Math.atan2(by-ay,bx-ax);
+  const nx=-Math.sin(ang), ny=Math.cos(ang);
+  const [ux,uy]=P(13),[lx,ly]=P(14), gap=Math.max(0,(lx-ux)*nx+(ly-uy)*ny);
+  ctx.save(); ctx.beginPath();
+  INNER_CONTOUR.forEach((k,j)=>{ const [x,y]=P(k); j?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+  ctx.closePath();
+  const mx=(ux+lx)/2,my=(uy+ly)/2, g=ctx.createRadialGradient(mx,my,0,mx,my,mw*0.6);
+  g.addColorStop(0,'#3a1418'); g.addColorStop(1,'#12050a');
+  ctx.fillStyle=g; ctx.fill(); ctx.clip();
+  const rel=gap/mw;
+  if(rel>0.12){ ctx.fillStyle=`rgba(150,62,72,${Math.min(0.85,(rel-0.12)*3)})`;
+    ctx.beginPath(); ctx.ellipse(lx-nx*gap*0.15,ly-ny*gap*0.15,mw*0.32,gap*0.35,ang,0,Math.PI*2); ctx.fill(); }
+  const ta=Math.min(0.9,rel*4);
+  if(ta>0.02){
+    ctx.fillStyle=`rgba(236,230,220,${ta})`;
+    ctx.beginPath(); ctx.ellipse(ux,uy,mw*0.36,mw*0.075,ang,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=`rgba(225,218,206,${ta*0.45})`;
+    ctx.beginPath(); ctx.ellipse(lx,ly,mw*0.3,mw*0.05,ang,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+/* ---------- Ana döngü ---------- */
+const out=$('out'), octx=out.getContext('2d');
+let anim=null, audioBuf=null, actx=null, src=null, playing=false, recording=false, startAt=0, rec=null, chunks=[];
+function frame(now){
+  requestAnimationFrame(frame);
+  if(!rig) return;
+  let t=(now/1000)%3600, a={open:0,wide:0,brow:0,speak:0};
+  if(playing){
+    const lat=recording?0:(actx.outputLatency||actx.baseLatency||0);
+    const tp=actx.currentTime-startAt-lat;
+    if(tp>=anim.duration+0.2){ stopPlay(); }
+    else { a=sampleAnim(anim,tp+0.03); t=Math.max(0,tp); }
+    if(recording) setStatus(`Kaydediliyor… ${fmt(Math.max(0,tp))} / ${fmt(anim.duration)}`);
+  }
+  const R=rig, mg=+$('mouthSl').value, hg=+$('headSl').value;
+  const bl=$('blinkChk').checked?blinkAt(t):0, gz=gazeAt(t);
+  const open=Math.min(1.6,a.open*mg), wide=a.wide*Math.min(1,a.open*2.5);
+  const roll=hg*(0.012*Math.sin(0.7*t)+0.007*Math.sin(1.9*t+1)+0.018*a.speak*Math.sin(2.6*t+0.5));
+  const tx=hg*R.H*(0.006*Math.sin(0.5*t+2)+0.003*Math.sin(1.3*t));
+  const ty=hg*R.H*(0.004*Math.sin(0.9*t)+0.003*Math.sin(2*Math.PI*t/4)+0.012*a.brow+0.006*a.speak*Math.sin(3.1*t));
+  const [dx,dy]=R.d,[rx,ry]=R.r,[px,py]=R.pivot, gs=R.Ew*0.07;
+  for(let i=0;i<R.n;i++){
+    const al=R.oS[i]*open+(R.b0[i]+R.b1[i])*bl+R.brS[i]*a.brow, sd=R.wS[i]*wide;
+    let x=R.rest[2*i]+dx*al+rx*sd, y=R.rest[2*i+1]+dy*al+ry*sd;
+    if(i>=468&&i<R.nF){ x+=(rx*gz[0]+dx*gz[1])*gs; y+=(ry*gz[0]+dy*gz[1])*gs; }
+    const w=R.hw[i];
+    if(w>0){ const c=Math.cos(roll*w), s=Math.sin(roll*w), qx=x-px, qy=y-py;
+      x=px+qx*c-qy*s+tx*w; y=py+qx*s+qy*c+ty*w; }
+    R.pos[2*i]=x; R.pos[2*i+1]=y;
+  }
+  drawGL(R);
+  octx.clearRect(0,0,R.cw,R.ch);
+  drawMouth(octx,R.pos);
+  octx.drawImage(R.glCanvas,0,0);
+  if($('ptsChk').checked){ octx.fillStyle='#F2B544';
+    for(let i=0;i<R.nF;i++){ octx.fillRect(R.pos[2*i]-1,R.pos[2*i+1]-1,2,2); } }
+}
+requestAnimationFrame(frame);
+const fmt=s=>`${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
+
+/* ---------- Ses yükleme, oynatma, kayıt ---------- */
+function ensureCtx(){ if(!actx) actx=new (window.AudioContext||window.webkitAudioContext)(); return actx; }
+$('audIn').onchange=async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  $('audName').textContent=f.name; stopPlay(); anim=null; updateButtons();
+  try{
+    ensureCtx(); setStatus('Ses inceleniyor…');
+    const ab=await f.arrayBuffer();
+    audioBuf=await new Promise((res,rej)=>actx.decodeAudioData(ab,res,rej));
+    anim=await analyze(audioBuf,p=>setStatus(`Ses inceleniyor… %${Math.round(p*100)}`));
+    setStatus(rig?`Hazır (${fmt(anim.duration)}). Oynat veya videoyu kaydet.`:'Ses hazır. Şimdi karakter resmini seç.');
+  }catch(err){ console.error(err); setStatus('Bu ses dosyası açılamadı. MP3, M4A veya WAV dene.', true); }
+  updateButtons();
+};
+function updateButtons(){
+  const ok=!!(rig&&anim);
+  $('playBtn').disabled=!ok||(playing&&recording);
+  $('recBtn').disabled=!ok||(playing&&!recording);
+  $('playBtn').textContent=playing&&!recording?'Durdur':'Oynat';
+  $('recBtn').textContent=recording?'Kaydı bitir':'Videoyu kaydet';
+}
+function pickMime(){
+  const c=['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/mp4','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
+  return window.MediaRecorder?(c.find(m=>MediaRecorder.isTypeSupported(m))||''):null;
+}
+function startPlay(record){
+  ensureCtx(); actx.resume();
+  src=actx.createBufferSource(); src.buffer=audioBuf; src.connect(actx.destination);
+  if(record){
+    const mime=pickMime();
+    if(mime===null){ setStatus('Bu tarayıcı video kaydını desteklemiyor. Chrome ile dene.', true); return; }
+    const dest=actx.createMediaStreamDestination(); src.connect(dest);
+    const stream=new MediaStream([...out.captureStream(30).getVideoTracks(),...dest.stream.getAudioTracks()]);
+    rec=new MediaRecorder(stream,mime?{mimeType:mime,videoBitsPerSecond:6e6}:{});
+    chunks=[]; rec.ondataavailable=ev=>{ if(ev.data.size) chunks.push(ev.data); };
+    rec.onstop=finishRec; rec.start(1000);
+    $('dl').hidden=true;
+  }
+  src.onended=()=>stopPlay();
+  startAt=actx.currentTime+0.05; src.start(startAt);
+  playing=true; recording=record; updateButtons();
+  if(!record) setStatus('Oynatılıyor…');
+}
+function stopPlay(){
+  if(!playing) return;
+  playing=false; try{ src.stop(); }catch{}
+  if(recording&&rec&&rec.state!=='inactive') rec.stop(); else setStatus('Durdu.');
+  recording=false; updateButtons();
+}
+function finishRec(){
+  const type=rec.mimeType||'video/webm', ext=type.includes('mp4')?'mp4':'webm';
+  const blob=new Blob(chunks,{type}); const dl=$('dl');
+  dl.href=URL.createObjectURL(blob); dl.download=`sahnely-${Date.now()}.${ext}`; dl.hidden=false;
+  setStatus(`Video hazır (${ext.toUpperCase()}, ${(blob.size/1048576).toFixed(1)} MB).`);
+}
+$('playBtn').onclick=()=>{ if(playing) stopPlay(); else startPlay(false); };
+$('recBtn').onclick=()=>{ if(playing) stopPlay(); else startPlay(true); };
+</script>
+</body>
+</html>
