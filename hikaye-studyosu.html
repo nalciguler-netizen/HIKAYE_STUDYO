@@ -127,6 +127,8 @@ footer a{color:var(--sun)}
   <input id="fMedya" type="file" accept="image/*,video/*" multiple>
   <p class="hint">Birden fazla resim ve video seçebilirsin. Hikâye boyunca sırayla gösterilirler; sıra dosya adına göredir (ekran görüntülerinde bu, çekilme sırasıdır). Videoların kendi sesi kapatılır, anlatım duyulur.</p>
   <div id="medyaListe" class="row"></div>
+  <label class="check"><input id="videoSes" type="checkbox"> 🎙️ Anlatım videonun içinde: videonun kendi sesini kullan</label>
+  <p class="hint">İşaretlersen senaryo gerekmez. Karakter videodaki konuşmaya göre ağzını oynatır, video ile ses birebir eşleşir. Senaryo da yazarsan altyazı olarak kullanılır.</p>
   <label for="duzen">Görüntü düzeni</label>
   <select id="duzen">
     <option value="birlesik" selected>Sahne tam ekran (ekran görüntüsü yok)</option>
@@ -170,6 +172,7 @@ footer a{color:var(--sun)}
     <select id="kaynak">
       <option value="ai">Yapay zekâ seslendirsin</option>
       <option value="dosya">Kendi ses kaydımı kullanacağım</option>
+      <option value="video">Yüklenen videonun kendi sesi</option>
     </select>
     <div id="aiBox">
       <label for="ses">Ses</label>
@@ -464,6 +467,12 @@ $('#duzen').onchange = e => {
 };
 function mediaPlan(P){
   const m = MEDIA.length; if(!m || !(LAYOUT === 'ekran' || LAYOUT === 'sadece')) return null;
+  if(AUD.vstart){   // anlatım videonun kendisinden: her video kendi sesiyle birebir aynı anda oynar
+    let vi = 0;
+    return MEDIA.map(m => { m.noLoop = true; if(m.kind !== 'video') return { a:Infinity, b:Infinity, len:1 };
+      const a0 = AUD.vstart[vi++]; return { a:a0, b:vi === AUD.vstart.length ? Infinity : a0 + m.dur, len:m.dur }; });
+  }
+  MEDIA.forEach(m => m.noLoop = false);
   const g = AUD.segs, vd = AUD.buf.duration, starts = [];
   if(g.length >= m){ for(let k = 0; k < m; k++) starts.push(g[Math.floor(k*g.length/m)].s); }
   else for(let k = 0; k < m; k++) starts.push(k*vd/m);
@@ -473,14 +482,14 @@ function mediaPlan(P){
 function mediaAt(P, T){
   if(!P.slots) return null;
   const t = T - P.lead;
-  let k = P.slots.findIndex(s => t >= s.a && t < s.b); if(k < 0) k = 0;
+  let k = P.slots.findIndex(s => t >= s.a && t < s.b); if(k < 0) k = Math.max(0, P.slots.findIndex(s => s.a !== Infinity));
   const s = P.slots[k], local = Math.max(0, t - Math.max(s.a, -P.lead));
   const fade = k > 0 ? Math.min(1, (t - s.a)/.45) : 1;
   const prev = k > 0 && fade < 1 ? k - 1 : -1;
   const prevLocal = prev >= 0 ? Math.max(0, t - Math.max(P.slots[prev].a, -P.lead)) : 0;
   return { k, local, prog: Math.min(1, local/s.len), fade, prev, prevLocal };
 }
-const vidTime = (m, local) => m.dur > 0 ? local % m.dur : 0;
+const vidTime = (m, local) => m.dur > 0 ? (m.noLoop ? Math.min(local, Math.max(0, m.dur - .05)) : local % m.dur) : 0;
 async function seekVideo(m, local){
   const target = vidTime(m, local);
   if(Math.abs(m.el.currentTime - target) < 1/15 && m.el.readyState >= 2) return;
@@ -931,8 +940,12 @@ function direct(segs){
 /* ================= SES ================= */
 $('#kaynak').onchange = e => {
   $('#aiBox').classList.toggle('gizli', e.target.value !== 'ai');
-  $('#fileBox').classList.toggle('gizli', e.target.value === 'ai');
+  $('#fileBox').classList.toggle('gizli', e.target.value !== 'dosya');
+  $('#videoSes').checked = e.target.value === 'video';
 };
+$('#videoSes').onchange = e => { $('#kaynak').value = e.target.checked ? 'video' : 'ai'; $('#kaynak').onchange({ target:$('#kaynak') });
+  if(e.target.checked){ if(LAYOUT === 'birlesik'){ LAYOUT = 'ekran'; $('#duzen').value = 'ekran'; $('#duzen').onchange({ target:$('#duzen') }); }
+    say(MEDIA.some(m => m.kind === 'video') ? 'Anlatım videodan alınacak. Senaryo gerekmez.' : 'Şimdi anlatımın olduğu videoyu ekle.'); } };
 $('#tonAuto').onchange = () => { $('#rTon').disabled = $('#tonAuto').checked; updTon(); };
 $('#rTon').oninput = () => $('#tonYaz').textContent = (+$('#rTon').value).toFixed(2);
 function autoPitch(){
@@ -944,7 +957,7 @@ function updTon(){
   if($('#tonAuto').checked){ $('#rTon').value = autoPitch(); }
   $('#tonYaz').textContent = (+$('#rTon').value).toFixed(2);
 }
-const pitch = () => ($('#kaynak').value === 'dosya' && $('#tonAuto').checked) ? 1 : +$('#rTon').value;  // hazır ses kaydında ton otomatik değiştirilmez
+const pitch = () => $('#kaynak').value === 'video' ? 1 : ($('#kaynak').value === 'dosya' && $('#tonAuto').checked) ? 1 : +$('#rTon').value;  // hazır ses kaydında ton otomatik değiştirilmez
 function voiceId(){
   const v = $('#ses').value; if(v !== 'auto') return v;
   if(S.gender === 'Kadın') return 'tr_TR-dfki-medium';
@@ -1044,15 +1057,31 @@ function envelope(buf){
 }
 function voiceKey(){
   const f = S.audioFile;
-  return [$('#kaynak').value, $('#metin').value, voiceId(), pitch().toFixed(2), f ? (f.name || 'kayit') + f.size : ''].join('|');
+  const vs = $('#kaynak').value === 'video' ? MEDIA.filter(m => m.kind === 'video').map(m => (m.file.name || 'v') + m.file.size).join(',') : '';
+  return [$('#kaynak').value, $('#metin').value, voiceId(), pitch().toFixed(2), f ? (f.name || 'kayit') + f.size : '', vs].join('|');
 }
 async function ensureVoice(){
   const key = voiceKey();
   if(AUD && AUD.key === key) return;
   const a = ac(), text = $('#metin').value.trim();
   const segs = text ? direct(parseScript(text)) : [];
-  let buf;
-  if($('#kaynak').value === 'dosya'){
+  let buf, vstart = null;
+  if($('#kaynak').value === 'video'){
+    const vids = MEDIA.filter(m => m.kind === 'video');
+    if(!vids.length) throw new Error('Videonun sesini kullanmak için önce 2. bölümden anlatımın olduğu videoyu ekle.');
+    say('Videonun sesi alınıyor...');
+    const sr = a.sampleRate, lens = vids.map(m => Math.max(1, Math.round(m.dur*sr)));
+    buf = a.createBuffer(1, lens.reduce((x, y) => x + y, 0), sr); const out = buf.getChannelData(0); let pos = 0; vstart = [];
+    for(let i = 0; i < vids.length; i++){
+      vstart.push(pos/sr); let b = null;
+      try{ b = await a.decodeAudioData(await vids[i].file.arrayBuffer()); }catch(e){ b = null; }   // sessiz videoda süresi kadar sessizlik
+      if(b){ const n = Math.min(lens[i], b.length), ch = b.numberOfChannels;
+        for(let c = 0; c < ch; c++){ const d = b.getChannelData(c); for(let j = 0; j < n; j++) out[pos + j] += d[j]/ch; } }
+      pos += lens[i];
+    }
+    if(segs.length){ const total = segs.reduce((n, g) => n + g.text.length, 0) || 1; let acc = 0;
+      segs.forEach(g => { g.s = acc/total*buf.duration; acc += g.text.length; g.e = acc/total*buf.duration; }); snapToSilences(buf, segs); }
+  } else if($('#kaynak').value === 'dosya'){
     const f = S.audioFile; if(!f) throw new Error('Ses ayarlarından bir ses kaydı seç.');
     say('Ses kaydı okunuyor...');
     buf = await a.decodeAudioData(await f.arrayBuffer());
@@ -1090,7 +1119,7 @@ async function ensureVoice(){
   say('Ses tonu ayarlanıyor...');
   buf = await pitchShift(buf, pitch());
   const count = m => segs.filter(g => g.mood === m).length;
-  AUD = { key, buf, segs, env:envelope(buf), mainMood: count('uzgun') > count('mutlu') ? 'uzgun' : 'mutlu' };
+  AUD = { key, buf, segs, vstart, env:envelope(buf), mainMood: count('uzgun') > count('mutlu') ? 'uzgun' : 'mutlu' };
 }
 $('#btnDinle').onclick = async () => {
   const b = $('#btnDinle'); b.disabled = true;
@@ -1435,6 +1464,7 @@ async function restoreJob(job){
   S.chOrig = S.ch;
   Object.assign(S, job.profile);
   if(S.crop && S.ch) S.ch = cropImg(S.ch, S.crop);
+  S.lm = null; if(S.ch){ try{ await detectFace(S.ch, true); }catch(e){} }
   if(job.bg){ S.bgFile = job.bg; S.bg = await loadImg(job.bg); } else { S.bgFile = null; S.bg = null; }
   S.audioFile = job.audioFile || null;
   $('#metin').value = job.text; $('#baslik').value = job.title;
