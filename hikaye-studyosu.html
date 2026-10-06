@@ -88,6 +88,7 @@ footer a{color:var(--sun)}
     <button id="btnVar" disabled>🎲 Yeni varyasyon</button>
   </div>
   <label class="check"><input id="fark" type="checkbox" checked> Otomatik farklılaştır (her seçimde farklı ışık, renk tonu ve kadraj)</label>
+  <label class="check"><input id="fotoMod" type="checkbox"> 📷 Gerçek fotoğraf (insan yüzü): daha ölçülü, doğal ağız hareketi</label>
   <div id="yuzDurum" class="badge">Karakter seçilmedi</div>
   <div class="two">
     <div>
@@ -270,7 +271,7 @@ const cv = $('#cv'), ctx = cv.getContext('2d');
 const FPS = 30;
 let W = 1280, H = 720;
 const S = { bg:null, ch:null, chName:'', pts:{mouth:null, eyeL:null, eyeR:null},
-            scale:1, off:0, mw:.09, es:.045, skin:'#e8b796', lip:'#a85a55', gender:'Kadın', age:30, lm:null };
+            scale:1, off:0, mw:.09, es:.045, skin:'#e8b796', lip:'#a85a55', gender:'Kadın', age:30, lm:null, foto:false };
 let mark = null, running = false, AUD = null, TTS = null, AC = null, FL = null, hidden = false;
 
 const say = t => $('#durum').textContent = t;
@@ -316,7 +317,8 @@ async function karakterYukle(f, opt = {}){
   if(m){ S.gender = m[2].toLowerCase() === 'kadin' ? 'Kadın' : 'Erkek'; S.age = +m[1];
     $('#cinsiyet').value = S.gender; $('#yas').value = S.age; $('#yasYaz').textContent = S.age; updTon(); }
   S.pts = {mouth:null, eyeL:null, eyeR:null}; S.crop = null; S.lm = null;
-  const had = loadSaved(); S.lm = null;
+  S.foto = /^(img|pxl|dsc|dcim|photo|foto|whatsapp|signal|received|fb_img|selfie|camera|image)[-_ ]?/i.test(f.name || '');
+  const had = loadSaved(); S.lm = null; $('#fotoMod').checked = !!S.foto;
   if(had && S.pts.mouth){ badge('Yüz hazır (kayıtlı ayarlar)', 'ok'); await detectFace(S.ch, true); sampleSkin(); prepComposite(); still(); return true; }
   still(); badge('Yüz aranıyor...');
   const ok = await detectFace(S.ch);
@@ -325,6 +327,7 @@ async function karakterYukle(f, opt = {}){
   prepComposite(); still();
   return ok;
 }
+$('#fotoMod').onchange = e => { S.foto = e.target.checked; save(); still(); };
 $('#fChar').onchange = e => { const f = e.target.files[0]; if(f) karakterYukle(f); };
 $('#btnVar').onclick = () => { if(KAYNAK) karakterYukle(KAYNAK, { fark:true }); };
 $('#fBg').onchange = async e => { const f = e.target.files[0]; if(!f) return; S.bgFile = f; S.bg = await loadImg(f); prepComposite(); still(); };
@@ -609,7 +612,7 @@ function yaGL(){
   Object.assign(GLR, { c, gl, prog, posBuf, uvBuf, ib, tex, uRes:gl.getUniformLocation(prog, 'uRes') });
   RIG = null; return gl;
 }
-function rigKur(src, lm){
+function rigKur(src, lm, foto){
   const gl = yaGL(); if(!gl) return null;
   const sw = src.width, sh = src.height, sc = Math.min(1, 1280/Math.max(sw, sh));
   const cw = Math.max(2, Math.round(sw*sc)), ch = Math.max(2, Math.round(sh*sc));
@@ -627,13 +630,14 @@ function rigKur(src, lm){
   ring(28, 1.45, 1.35, .55); ring(32, 2.1, 1.9, .18);
   for(let i = 0; i < 8; i++){ const t = i/8; pts.push([t*cw, 0], [cw, t*ch], [cw - t*cw, ch], [0, ch - t*ch]); hw.push(0, 0, 0, 0); }
   const n = pts.length, oS = new Float32Array(n), wS = new Float32Array(n), b0 = new Float32Array(n), b1 = new Float32Array(n), brS = new Float32Array(n);
-  const sU = new Set(YA_UI.concat(YA_UO)), sL = new Set(YA_LI.concat(YA_LO)), sC = new Set(YA_KOSE), A = H*.085;
+  // Gerçek fotoğrafta hareket daha ölçülü ve yumuşak: gerçek yüzde abartı hemen göze batar
+  const sU = new Set(YA_UI.concat(YA_UO)), sL = new Set(YA_LI.concat(YA_LO)), sC = new Set(YA_KOSE), A = H*(foto ? .055 : .085), UP = foto ? .12 : .22;
   for(let i = 0; i < nF; i++){
-    const q = sub(P[i], M), u = dot(q, r)/W, v = dot(q, d)/H, au = Math.abs(u), wu = 1 - yss(.7, 2, au), lf = 1 - .55*yss(.1, .5, au);
+    const q = sub(P[i], M), u = dot(q, r)/W, v = dot(q, d)/H, au = Math.abs(u), wu = 1 - (foto ? yss(.9, 2.4, au) : yss(.7, 2, au)), lf = 1 - .55*yss(.1, .5, au);
     let jaw = 0, up = 0;
     if(sC.has(i)) jaw = .45; else if(sL.has(i)) jaw = lf; else if(sU.has(i)) up = lf;
     else if(v > 0) jaw = wu*yss(-.005, .05, v); else up = wu*(1 - yss(.02, .1, -v))*.7;
-    oS[i] = A*(jaw - .22*up); const vm = v*H/W; wS[i] = u*W*.35*Math.exp(-(u*u + vm*vm)/.5);
+    oS[i] = A*(jaw - UP*up); const vm = v*H/W; wS[i] = u*W*.35*Math.exp(-(u*u + vm*vm)/.5);
   }
   let EwS = 0;
   YA_GOZ.forEach((E, k) => {
@@ -665,16 +669,28 @@ function rigKur(src, lm){
   gl.bindTexture(gl.TEXTURE_2D, GLR.tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, tex);
   gl.uniform2f(GLR.uRes, cw, ch);
   const out = document.createElement('canvas'); out.width = cw; out.height = ch;
-  return { src, lm, cw, ch, n, nF, rest, oS, wS, b0, b1, brS, hw:Float32Array.from(hw), d, r, H, Ew:EwS/2, nIdx:idx.length,
+  return { src, lm, foto, cw, ch, n, nF, rest, oS, wS, b0, b1, brS, hw:Float32Array.from(hw), d, r, H, Ew:EwS/2, nIdx:idx.length,
            pivot:[chin[0] + d[0]*H*.3, chin[1] + d[1]*H*.3], pos:new Float32Array(n*2), out, og:out.getContext('2d') };
 }
-function rigAgiz(g, pos){
+function rigAgiz(g, pos, foto){
   const P = k => [pos[2*k], pos[2*k + 1]];
   const [ax, ay] = P(78), [bx, by] = P(308), mw = Math.hypot(bx - ax, by - ay) || 1, an = Math.atan2(by - ay, bx - ax), nx = -Math.sin(an), ny = Math.cos(an);
   const [ux, uy] = P(13), [lx, ly] = P(14), gap = Math.max(0, (lx - ux)*nx + (ly - uy)*ny), rel = gap/mw;
   g.save(); g.beginPath(); YA_IC.forEach((k, j) => { const [x, y] = P(k); j ? g.lineTo(x, y) : g.moveTo(x, y); }); g.closePath();
   const mx = (ux + lx)/2, my = (uy + ly)/2, gr = g.createRadialGradient(mx, my, 0, mx, my, mw*.6);
-  gr.addColorStop(0, '#3a1418'); gr.addColorStop(1, '#12050a'); g.fillStyle = gr; g.fill(); g.clip();
+  gr.addColorStop(0, foto ? '#2a0f11' : '#3a1418'); gr.addColorStop(1, foto ? '#0b0304' : '#12050a'); g.fillStyle = gr; g.fill(); g.clip();
+  if(foto){   // fotoğraf: yumuşak kenarlı, gölgeli diş ve hafif dil; çizgi film görünümü olmasın
+    if(rel > .18){ g.fillStyle = `rgba(120,48,56,${Math.min(.45, (rel - .18)*1.6)})`; g.beginPath(); g.ellipse(lx - nx*gap*.1, ly - ny*gap*.1, mw*.3, gap*.3, an, 0, Math.PI*2); g.fill(); }
+    const ta2 = Math.min(.8, rel*3);
+    if(ta2 > .03){ try{ g.filter = 'blur(' + Math.max(.6, mw*.012).toFixed(1) + 'px)'; }catch(e){}
+      const tg = g.createLinearGradient(ux, uy - mw*.02, ux + nx*mw*.12, uy + ny*mw*.12);
+      tg.addColorStop(0, `rgba(232,226,214,${ta2})`); tg.addColorStop(1, `rgba(170,160,148,${ta2*.6})`);
+      g.fillStyle = tg; g.beginPath(); g.ellipse(ux + nx*mw*.02, uy + ny*mw*.02, mw*.34, mw*.06, an, 0, Math.PI*2); g.fill();
+      try{ g.filter = 'none'; }catch(e){} }
+    const sh = g.createLinearGradient(ux, uy, ux + nx*gap, uy + ny*gap); sh.addColorStop(0, 'rgba(0,0,0,.35)'); sh.addColorStop(.35, 'rgba(0,0,0,0)');
+    g.fillStyle = sh; g.fillRect(Math.min(ax, bx) - mw, Math.min(ay, by) - mw, mw*3, mw*3);
+    g.restore(); return;
+  }
   if(rel > .12){ g.fillStyle = `rgba(150,62,72,${Math.min(.85, (rel - .12)*3)})`; g.beginPath(); g.ellipse(lx - nx*gap*.15, ly - ny*gap*.15, mw*.32, gap*.35, an, 0, Math.PI*2); g.fill(); }
   const ta = Math.min(.9, rel*4);
   if(ta > .02){ g.fillStyle = `rgba(236,230,220,${ta})`; g.beginPath(); g.ellipse(ux, uy, mw*.36, mw*.075, an, 0, Math.PI*2); g.fill();
@@ -695,7 +711,7 @@ function rigCiz(R, a){
   gl.viewport(0, 0, R.cw, R.ch); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.bindBuffer(gl.ARRAY_BUFFER, GLR.posBuf); gl.bufferSubData(gl.ARRAY_BUFFER, 0, R.pos);
   gl.drawElements(gl.TRIANGLES, R.nIdx, gl.UNSIGNED_SHORT, 0);
-  R.og.clearRect(0, 0, R.cw, R.ch); rigAgiz(R.og, R.pos); R.og.drawImage(GLR.c, 0, 0);
+  R.og.clearRect(0, 0, R.cw, R.ch); rigAgiz(R.og, R.pos, R.foto); R.og.drawImage(GLR.c, 0, 0);
   return R.out;
 }
 const YA_BAKIS = (() => { const r = rng(23), a = []; let t = 0; while(t < 7200){ const b = r() < .3; a.push([t, (r() - .5)*(b ? 1.4 : .5), (r() - .5)*(b ? .7 : .3)]); t += 1.5 + r()*2.5; } return a; })();
@@ -705,10 +721,10 @@ function yaBakis(t){ let i = 0, lo = 0, hi = YA_BAKIS.length - 1; while(lo <= hi
 function yuzAgi(src, fr){
   if(!S.lm || fr.marks || !src) return null;
   try{
-    if(!RIG || RIG.src !== src || RIG.lm !== S.lm || !GLR.gl || GLR.gl.isContextLost()) RIG = rigKur(src, S.lm);
+    if(!RIG || RIG.src !== src || RIG.lm !== S.lm || RIG.foto !== !!S.foto || !GLR.gl || GLR.gl.isContextLost()) RIG = rigKur(src, S.lm, !!S.foto);
     if(!RIG) return null;
     const T = fr.T || 0, o = Math.max(0, fr.o || 0);
-    return rigCiz(RIG, { open:Math.min(1.4, o), wide:0, blink:fr.bv ?? (fr.blink ? 1 : 0), brow:Math.min(1, (fr.pop || 0)/.015), gaze:yaBakis(T),
+    return rigCiz(RIG, { open:Math.min(S.foto ? 1.1 : 1.4, o), wide:0, blink:fr.bv ?? (fr.blink ? 1 : 0), brow:Math.min(1, (fr.pop || 0)/.015), gaze:yaBakis(T),
       roll:.012*Math.sin(.7*T) + .007*Math.sin(1.9*T + 1) + .015*Math.min(1, o)*Math.sin(2.6*T), tx:.004*Math.sin(.5*T + 2),
       ty:.004*Math.sin(.9*T) + .003*Math.sin(2*Math.PI*T/4) });
   }catch(e){ console.warn('yüz ağı', e); RIG = null; return null; }
@@ -874,7 +890,7 @@ function sampleSkin(){
   }catch(e){}
 }
 function save(){
-  try{ localStorage.setItem('hs_' + S.chName, JSON.stringify({pts:S.pts, scale:S.scale, off:S.off, mw:S.mw, es:S.es, gender:S.gender, age:S.age, crop:S.crop || null})); }catch(e){}
+  try{ localStorage.setItem('hs_' + S.chName, JSON.stringify({pts:S.pts, scale:S.scale, off:S.off, mw:S.mw, es:S.es, gender:S.gender, age:S.age, crop:S.crop || null, foto:!!S.foto})); }catch(e){}
 }
 function loadSaved(){
   try{
@@ -1542,7 +1558,7 @@ async function restoreJob(job){
   $('#cinsiyet').value = S.gender; $('#yas').value = S.age; $('#yasYaz').textContent = S.age;
   $('#rScale').value = S.scale; $('#rOff').value = S.off; $('#rMw').value = S.mw; $('#rEs').value = S.es;
   $('#tonYaz').textContent = (+$('#rTon').value).toFixed(2);
-  badge('Yüz hazır (kayıtlı iş)', 'ok');
+  $('#fotoMod').checked = !!S.foto; badge('Yüz hazır (kayıtlı iş)', 'ok');
   const [w, h] = o.res.split('x').map(Number); setRes(w, h); still();
 }
 async function showBanner(){
@@ -1595,7 +1611,7 @@ async function produce(resumeJob, toplu){
               opts:currentOpts(), ch:S.chFile || null, bg:S.bgFile || null, audioFile:S.audioFile || null,
               layout:LAYOUT, media:MEDIA.map(m => m.file),
               profile:{ chName:S.chName, pts:S.pts, scale:S.scale, off:S.off, mw:S.mw, es:S.es,
-                        gender:S.gender, age:S.age, skin:S.skin, lip:S.lip, crop:S.crop || null } };
+                        gender:S.gender, age:S.age, skin:S.skin, lip:S.lip, crop:S.crop || null, foto:!!S.foto } };
       try{ await saveJob(job); }catch(e){ say('Uyarı: iş kaydedilemedi, yarıda kalırsa baştan başlar.'); }
     }
   }
