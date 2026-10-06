@@ -128,7 +128,12 @@ footer a{color:var(--sun)}
   <p class="hint">Birden fazla resim ve video seçebilirsin. Hikâye boyunca sırayla gösterilirler; sıra dosya adına göredir (ekran görüntülerinde bu, çekilme sırasıdır). Videoların kendi sesi kapatılır, anlatım duyulur.</p>
   <div id="medyaListe" class="row"></div>
   <label class="check"><input id="videoSes" type="checkbox"> 🎙️ Anlatım videonun içinde: videonun kendi sesini kullan</label>
-  <p class="hint">İşaretlersen senaryo gerekmez. Karakter videodaki konuşmaya göre ağzını oynatır, video ile ses birebir eşleşir. Senaryo da yazarsan altyazı olarak kullanılır.</p>
+  <p class="hint">İşaretlersen senaryo yazman gerekmez: videodaki konuşma telefonda otomatik yazıya dökülür ve senaryo kutusuna gelir. Karakter videodaki sesle, aynı anda ağzını oynatarak anlatır; altyazılar da bu konuşmadan oluşur. Yazıya dökülen metni Senaryo bölümünde düzeltebilirsin.</p>
+  <div id="sttBox" class="gizli">
+    <label for="sttModel">Yazıya dökme</label>
+    <select id="sttModel"><option value="onnx-community/whisper-base">Hızlı (ilk seferde yaklaşık 80 MB indirilir)</option><option value="onnx-community/whisper-small">Daha doğru, daha yavaş (yaklaşık 250 MB)</option></select>
+    <button id="btnYaziya" class="main" style="background:var(--line);color:var(--text)">📝 Videodaki konuşmayı şimdi yazıya dök</button>
+  </div>
   <label for="duzen">Görüntü düzeni</label>
   <select id="duzen">
     <option value="birlesik" selected>Sahne tam ekran (ekran görüntüsü yok)</option>
@@ -941,7 +946,7 @@ function direct(segs){
 $('#kaynak').onchange = e => {
   $('#aiBox').classList.toggle('gizli', e.target.value !== 'ai');
   $('#fileBox').classList.toggle('gizli', e.target.value !== 'dosya');
-  $('#videoSes').checked = e.target.value === 'video';
+  $('#videoSes').checked = e.target.value === 'video'; $('#sttBox').classList.toggle('gizli', e.target.value !== 'video');
 };
 $('#videoSes').onchange = e => { $('#kaynak').value = e.target.checked ? 'video' : 'ai'; $('#kaynak').onchange({ target:$('#kaynak') });
   if(e.target.checked){ if(LAYOUT === 'birlesik'){ LAYOUT = 'ekran'; $('#duzen').value = 'ekran'; $('#duzen').onchange({ target:$('#duzen') }); }
@@ -1060,27 +1065,89 @@ function voiceKey(){
   const vs = $('#kaynak').value === 'video' ? MEDIA.filter(m => m.kind === 'video').map(m => (m.file.name || 'v') + m.file.size).join(',') : '';
   return [$('#kaynak').value, $('#metin').value, voiceId(), pitch().toFixed(2), f ? (f.name || 'kayit') + f.size : '', vs].join('|');
 }
+/* ===== Videodaki konuşmayı yazıya dökme (Whisper; telefonda çalışır, MIT lisanslı) ===== */
+let ASR = null, ASRid = '';
+const vImza = () => MEDIA.filter(m => m.kind === 'video').map(m => (m.file.name || 'v') + m.file.size).join(',');
+function trOku(sig){ try{ return JSON.parse(localStorage.getItem('tr_' + sig) || 'null'); }catch(e){ return null; } }
+function trYaz(sig, tr){ try{ localStorage.setItem('tr_' + sig, JSON.stringify(tr)); }catch(e){} }
+async function videoSesiAl(a){
+  const vids = MEDIA.filter(m => m.kind === 'video');
+  if(!vids.length) throw new Error('Videonun sesini kullanmak için önce 2. bölümden anlatımın olduğu videoyu ekle.');
+  say('Videonun sesi alınıyor...');
+  const sr = a.sampleRate, lens = vids.map(m => Math.max(1, Math.round(m.dur*sr)));
+  const buf = a.createBuffer(1, lens.reduce((x, y) => x + y, 0), sr), out = buf.getChannelData(0), vstart = []; let pos = 0;
+  for(let i = 0; i < vids.length; i++){
+    vstart.push(pos/sr); let b = null;
+    try{ b = await a.decodeAudioData(await vids[i].file.arrayBuffer()); }catch(e){ b = null; }   // sessiz videoda süresi kadar sessizlik
+    if(b){ const n = Math.min(lens[i], b.length), ch = b.numberOfChannels;
+      for(let c = 0; c < ch; c++){ const d = b.getChannelData(c); for(let j = 0; j < n; j++) out[pos + j] += d[j]/ch; } }
+    pos += lens[i];
+  }
+  return { buf, vstart };
+}
+async function yaziyaDok(buf){
+  const id = $('#sttModel').value;
+  if(!ASR || ASRid !== id){
+    say('Konuşma tanıma modeli hazırlanıyor (ilk seferde indirilir, sonra telefonda kalır)...');
+    const T = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3');
+    const ilerle = p => { if(p.status === 'progress' && p.total) say(`Konuşma tanıma modeli indiriliyor: %${Math.round(p.loaded/p.total*100)}`); };
+    try{ ASR = await T.pipeline('automatic-speech-recognition', id, { dtype:'q8', device:'wasm', progress_callback:ilerle }); }
+    catch(e){ ASR = await T.pipeline('automatic-speech-recognition', id, { progress_callback:ilerle }); }
+    ASRid = id;
+  }
+  say('Videodaki konuşma yazıya dökülüyor... (birkaç dakika sürebilir, ekranı açık tut)');
+  const n = Math.ceil(buf.duration*16000), oc = new OfflineAudioContext(1, n, 16000), src = oc.createBufferSource();
+  src.buffer = buf; src.connect(oc.destination); src.start();
+  const pcm = (await oc.startRendering()).getChannelData(0);
+  const out = await ASR(pcm, { language:'turkish', task:'transcribe', chunk_length_s:30, stride_length_s:5, return_timestamps:true });
+  const chunks = (out.chunks || []).map(c => { const s0 = (c.timestamp && c.timestamp[0]) || 0, e0 = (c.timestamp && c.timestamp[1]);
+    return { s:s0, e:(e0 == null ? s0 + 2 : e0), t:(c.text || '').trim() }; }).filter(c => c.t);
+  // uzun duraklamalarda yeni paragraf: anlatıcı nefes alır, kamera yeni plana geçer
+  let metin = '';
+  chunks.forEach((c, i) => { metin += (i === 0 ? '' : (c.s - chunks[i - 1].e > 1.2 ? '\n\n' : ' ')) + c.t; });
+  if(!metin) metin = (out.text || '').trim();
+  return { metin, chunks };
+}
+/* Senaryo cümlelerini, yazıya dökmedeki zamanlara göre videodaki konuşmaya yerleştirir */
+function zamanla(segs, chunks, dur){
+  if(!segs.length) return;
+  const marks = []; let pos = 0;
+  if(chunks.length){ for(const c of chunks){ marks.push([pos, c.s]); pos += c.t.length + 1; marks.push([pos, Math.max(c.s, c.e)]); } }
+  else { marks.push([0, 0]); pos = 1; marks.push([1, dur]); }
+  const zaman = cp => { for(let i = 1; i < marks.length; i++){ if(cp <= marks[i][0]){ const [a0, t0] = marks[i - 1], [a1, t1] = marks[i];
+    return a1 > a0 ? t0 + (t1 - t0)*(cp - a0)/(a1 - a0) : t1; } } return marks[marks.length - 1][1]; };
+  const total = segs.reduce((x, g) => x + g.text.length, 0) || 1; let acc = 0;
+  segs.forEach(g => { g.s = zaman(acc/total*pos); acc += g.text.length; g.e = Math.max(g.s + .3, zaman(acc/total*pos)); });
+}
+async function transkriptHazirla(a, buf){
+  const sig = vImza(); let tr = trOku(sig);
+  if(!tr){ tr = await yaziyaDok(buf); trYaz(sig, tr); $('#metin').value = tr.metin; }
+  else if(!$('#metin').value.trim()) $('#metin').value = tr.metin;
+  return tr;
+}
+$('#btnYaziya').onclick = async () => {
+  if(running) return say('Önce süren işi durdur.');
+  const b = $('#btnYaziya'); b.disabled = true;
+  try{
+    const a = ac(); const { buf } = await videoSesiAl(a);
+    const sig = vImza(); localStorage.removeItem('tr_' + sig);
+    const tr = await yaziyaDok(buf); trYaz(sig, tr); $('#metin').value = tr.metin; AUD = null;
+    say(`Konuşma yazıya döküldü (${tr.metin.split(/\s+/).length} kelime). Senaryo bölümünde kontrol edebilirsin.`);
+  }catch(e){ console.warn(e); say('Yazıya dökülemedi: ' + (e.message || e) + '. İnternet bağlantısını kontrol et.'); }
+  b.disabled = false;
+};
 async function ensureVoice(){
   const key = voiceKey();
   if(AUD && AUD.key === key) return;
   const a = ac(), text = $('#metin').value.trim();
-  const segs = text ? direct(parseScript(text)) : [];
+  let segs = text ? direct(parseScript(text)) : [];
   let buf, vstart = null;
   if($('#kaynak').value === 'video'){
-    const vids = MEDIA.filter(m => m.kind === 'video');
-    if(!vids.length) throw new Error('Videonun sesini kullanmak için önce 2. bölümden anlatımın olduğu videoyu ekle.');
-    say('Videonun sesi alınıyor...');
-    const sr = a.sampleRate, lens = vids.map(m => Math.max(1, Math.round(m.dur*sr)));
-    buf = a.createBuffer(1, lens.reduce((x, y) => x + y, 0), sr); const out = buf.getChannelData(0); let pos = 0; vstart = [];
-    for(let i = 0; i < vids.length; i++){
-      vstart.push(pos/sr); let b = null;
-      try{ b = await a.decodeAudioData(await vids[i].file.arrayBuffer()); }catch(e){ b = null; }   // sessiz videoda süresi kadar sessizlik
-      if(b){ const n = Math.min(lens[i], b.length), ch = b.numberOfChannels;
-        for(let c = 0; c < ch; c++){ const d = b.getChannelData(c); for(let j = 0; j < n; j++) out[pos + j] += d[j]/ch; } }
-      pos += lens[i];
-    }
-    if(segs.length){ const total = segs.reduce((n, g) => n + g.text.length, 0) || 1; let acc = 0;
-      segs.forEach(g => { g.s = acc/total*buf.duration; acc += g.text.length; g.e = acc/total*buf.duration; }); snapToSilences(buf, segs); }
+    ({ buf, vstart } = await videoSesiAl(a));
+    const tr = await transkriptHazirla(a, buf);           // videodaki konuşma = senaryo
+    const metin2 = $('#metin').value.trim();
+    segs = metin2 ? direct(parseScript(metin2)) : [];
+    zamanla(segs, tr.chunks, buf.duration);
   } else if($('#kaynak').value === 'dosya'){
     const f = S.audioFile; if(!f) throw new Error('Ses ayarlarından bir ses kaydı seç.');
     say('Ses kaydı okunuyor...');
@@ -1119,7 +1186,7 @@ async function ensureVoice(){
   say('Ses tonu ayarlanıyor...');
   buf = await pitchShift(buf, pitch());
   const count = m => segs.filter(g => g.mood === m).length;
-  AUD = { key, buf, segs, vstart, env:envelope(buf), mainMood: count('uzgun') > count('mutlu') ? 'uzgun' : 'mutlu' };
+  AUD = { key:voiceKey(), buf, segs, vstart, env:envelope(buf), mainMood: count('uzgun') > count('mutlu') ? 'uzgun' : 'mutlu' };
 }
 $('#btnDinle').onclick = async () => {
   const b = $('#btnDinle'); b.disabled = true;
