@@ -1,15 +1,47 @@
-// Hikâye Stüdyosu servis çalışanı: uygulamayı telefona kurulabilir yapar, uygulama dosyalarını önbellekte tutar.
-const CACHE = 'sahnely-v13';
-const FILES = ['./hikaye-studyosu.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
-self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES))); self.skipWaiting(); });
-self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))));
-  self.clients.claim();
+/* Sahnely service worker
+   Sayfanın kendisi (HTML) her zaman önce internetten alınır: GitHub'a yeni sürüm
+   yüklenince telefon onu hemen görür. İnternet yoksa saklanan kopya açılır.
+   Diğer dosyalar (ikon, manifest) önce telefondan gelir. */
+const SURUM = 'sahnely-v4';
+
+self.addEventListener('install', e => {
+  self.skipWaiting();   // yeni sürüm beklemeden devreye girsin
 });
+
+self.addEventListener('activate', e => {
+  e.waitUntil((async () => {
+    const adlar = await caches.keys();
+    await Promise.all(adlar.filter(a => a !== SURUM).map(a => caches.delete(a)));   // eski kopyaları sil
+    await self.clients.claim();
+  })());
+});
+
 self.addEventListener('fetch', e => {
-  const u = new URL(e.request.url);
-  if (e.request.method !== 'GET' || u.origin !== location.origin) return; // ses/yüz modelleri gibi dış istekler olduğu gibi geçer
-  // önce internet (her zaman en yeni sürüm), internet yoksa önbellek
-  e.respondWith(fetch(e.request).then(r => { const k = r.clone(); caches.open(CACHE).then(c => c.put(e.request, k)); return r; })
-    .catch(() => caches.match(e.request)));
+  const req = e.request;
+  if(req.method !== 'GET') return;
+  const url = new URL(req.url);
+  if(url.origin !== location.origin) return;          // yazı tipleri, modeller vb. tarayıcıya kalsın
+  if(!url.pathname.startsWith(new URL(self.registration.scope).pathname)) return;   // YolHava'ya karışma
+
+  const sayfa = req.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname.endsWith('/');
+  if(sayfa){
+    e.respondWith((async () => {
+      try{
+        const yanit = await fetch(req, { cache:'no-store' });
+        if(yanit.ok){ const c = await caches.open(SURUM); c.put(url.pathname, yanit.clone()); }
+        return yanit;
+      }catch(err){
+        const c = await caches.open(SURUM);
+        return (await c.match(url.pathname)) || (await c.match(req)) || Response.error();
+      }
+    })());
+    return;
+  }
+  e.respondWith((async () => {
+    const c = await caches.open(SURUM), eski = await c.match(req);
+    if(eski) return eski;
+    const yanit = await fetch(req);
+    if(yanit.ok) c.put(req, yanit.clone());
+    return yanit;
+  })());
 });
