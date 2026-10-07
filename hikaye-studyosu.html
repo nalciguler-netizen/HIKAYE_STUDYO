@@ -89,6 +89,9 @@ footer a{color:var(--sun)}
   </div>
   <label class="check"><input id="fark" type="checkbox" checked> Otomatik farklılaştır (her seçimde farklı ışık, renk tonu ve kadraj)</label>
   <label class="check"><input id="fotoMod" type="checkbox"> 📷 Gerçek fotoğraf (insan yüzü): daha ölçülü, doğal ağız hareketi</label>
+  <label for="agizKazanc">Ağız açıklığı: <b id="agizDeg">1.3</b></label>
+  <input id="agizKazanc" type="range" min="0.6" max="2" step="0.05" value="1.3">
+  <label class="check"><input id="noktaGoster" type="checkbox"> Yüz noktalarını göster (yüz doğru bulundu mu kontrolü; videoya girmez)</label>
   <div id="yuzDurum" class="badge">Karakter seçilmedi</div>
   <div class="two">
     <div>
@@ -328,6 +331,10 @@ async function karakterYukle(f, opt = {}){
   return ok;
 }
 $('#fotoMod').onchange = e => { S.foto = e.target.checked; save(); still(); };
+try{ const kz = localStorage.getItem('hs_agizKazanc'); if(kz) $('#agizKazanc').value = kz; }catch(e){}
+$('#agizDeg').textContent = (+$('#agizKazanc').value).toFixed(2);
+$('#agizKazanc').oninput = e => { $('#agizDeg').textContent = (+e.target.value).toFixed(2); try{ localStorage.setItem('hs_agizKazanc', e.target.value); }catch(x){} still(); };
+$('#noktaGoster').onchange = () => still();
 $('#fChar').onchange = e => { const f = e.target.files[0]; if(f) karakterYukle(f); };
 $('#btnVar').onclick = () => { if(KAYNAK) karakterYukle(KAYNAK, { fark:true }); };
 $('#fBg').onchange = async e => { const f = e.target.files[0]; if(!f) return; S.bgFile = f; S.bg = await loadImg(f); prepComposite(); still(); };
@@ -676,6 +683,7 @@ function rigAgiz(g, pos, foto){
   const P = k => [pos[2*k], pos[2*k + 1]];
   const [ax, ay] = P(78), [bx, by] = P(308), mw = Math.hypot(bx - ax, by - ay) || 1, an = Math.atan2(by - ay, bx - ax), nx = -Math.sin(an), ny = Math.cos(an);
   const [ux, uy] = P(13), [lx, ly] = P(14), gap = Math.max(0, (lx - ux)*nx + (ly - uy)*ny), rel = gap/mw;
+  if(gap < 1.5) return;   // ağız kapalıyken iç hiç çizilmez (kırmızı nokta kalmasın)
   g.save(); g.beginPath(); YA_IC.forEach((k, j) => { const [x, y] = P(k); j ? g.lineTo(x, y) : g.moveTo(x, y); }); g.closePath();
   const mx = (ux + lx)/2, my = (uy + ly)/2, gr = g.createRadialGradient(mx, my, 0, mx, my, mw*.6);
   gr.addColorStop(0, foto ? '#2a0f11' : '#3a1418'); gr.addColorStop(1, foto ? '#0b0304' : '#12050a'); g.fillStyle = gr; g.fill(); g.clip();
@@ -691,8 +699,8 @@ function rigAgiz(g, pos, foto){
     g.fillStyle = sh; g.fillRect(Math.min(ax, bx) - mw, Math.min(ay, by) - mw, mw*3, mw*3);
     g.restore(); return;
   }
-  if(rel > .12){ g.fillStyle = `rgba(150,62,72,${Math.min(.85, (rel - .12)*3)})`; g.beginPath(); g.ellipse(lx - nx*gap*.15, ly - ny*gap*.15, mw*.32, gap*.35, an, 0, Math.PI*2); g.fill(); }
-  const ta = Math.min(.9, rel*4);
+  if(rel > .2){ g.fillStyle = `rgba(150,62,72,${Math.min(.85, (rel - .2)*3)})`; g.beginPath(); g.ellipse(lx - nx*gap*.15, ly - ny*gap*.15, mw*.32, gap*.35, an, 0, Math.PI*2); g.fill(); }
+  const ta = Math.min(.9, Math.max(0, rel - .06)*5);
   if(ta > .02){ g.fillStyle = `rgba(236,230,220,${ta})`; g.beginPath(); g.ellipse(ux, uy, mw*.36, mw*.075, an, 0, Math.PI*2); g.fill();
     g.fillStyle = `rgba(225,218,206,${ta*.45})`; g.beginPath(); g.ellipse(lx, ly, mw*.3, mw*.05, an, 0, Math.PI*2); g.fill(); }
   g.restore();
@@ -723,8 +731,9 @@ function yuzAgi(src, fr){
   try{
     if(!RIG || RIG.src !== src || RIG.lm !== S.lm || RIG.foto !== !!S.foto || !GLR.gl || GLR.gl.isContextLost()) RIG = rigKur(src, S.lm, !!S.foto);
     if(!RIG) return null;
-    const T = fr.T || 0, o = Math.max(0, fr.o || 0);
-    return rigCiz(RIG, { open:Math.min(S.foto ? 1.1 : 1.4, o), wide:0, blink:fr.bv ?? (fr.blink ? 1 : 0), brow:Math.min(1, (fr.pop || 0)/.015), gaze:yaBakis(T),
+    const T = fr.T || 0, kz = +($('#agizKazanc') ? $('#agizKazanc').value : 1.3);
+    const o = Math.max(0, fr.yo != null ? fr.yo : (fr.o || 0)), w = fr.yw != null ? fr.yw*Math.min(1, o*2.5) : 0;
+    return rigCiz(RIG, { open:Math.min(S.foto ? 1.4 : 1.8, o*kz), wide:w, blink:fr.bv ?? (fr.blink ? 1 : 0), brow:Math.max(fr.yb || 0, Math.min(1, (fr.pop || 0)/.015)), gaze:yaBakis(T),
       roll:.012*Math.sin(.7*T) + .007*Math.sin(1.9*T + 1) + .015*Math.min(1, o)*Math.sin(2.6*T), tx:.004*Math.sin(.5*T + 2),
       ty:.004*Math.sin(.9*T) + .003*Math.sin(2*Math.PI*T/4) });
   }catch(e){ console.warn('yüz ağı', e); RIG = null; return null; }
@@ -767,6 +776,8 @@ function draw(fr){
     }
     const kaynak = (sep && !useMedia && S.chT) || S.ch, agli = yuzAgi(kaynak, fr);
     ctx.drawImage(agli || kaynak, r.x, r.y, r.w, r.h);
+    if(agli && RIG && !running && $('#noktaGoster') && $('#noktaGoster').checked){ ctx.fillStyle = '#F2B544'; const kx = r.w/RIG.cw, ky = r.h/RIG.ch;
+      for(let i = 0; i < RIG.nF; i++) ctx.fillRect(r.x + RIG.pos[2*i]*kx - 1.5, r.y + RIG.pos[2*i + 1]*ky - 1.5, 3, 3); }
     if(!agli && S.pts.mouth && o > .06){
       const m = pt(S.pts.mouth, r), mw = r.w*S.mw;
       const rx = mw/2*(.75 + .25*o), ry = Math.max(mw*.38*o, 1.5), cy = m.y + ry*.25;
@@ -805,7 +816,7 @@ function draw(fr){
   if(warm > .01){ ctx.fillStyle = `rgba(255,170,80,${.08*warm})`; ctx.fillRect(0, 0, W, H); }
   if(cool > .01){ ctx.fillStyle = `rgba(50,80,150,${.14*cool})`; ctx.fillRect(0, 0, W, H); }
   if(!marks){
-    const g = ctx.createRadialGradient(W/2, H/2, H*.35, W/2, H/2, W*.62);
+    const g = ctx.createRadialGradient(W/2, H/2, Math.min(W, H)*.35, W/2, H/2, Math.hypot(W, H)*.5);   // dikeyde de yumuşak kenar
     g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, `rgba(0,0,0,${.3 + .2*cool})`);
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
@@ -1076,6 +1087,36 @@ function envelope(buf){
   for(let i = 0; i < n; i++){ let v = Math.min(1, env[i]/p); v = v < .12 ? 0 : (v - .12)/.88; v = prev*.35 + v*.65; prev = v; env[i] = v; }
   return env;
 }
+/* ===== Ağız için ses analizi (yüz testi sayfasındakiyle aynı): açıklık + a/e/i ile o/u ayrımı + vurgu ===== */
+function yaFFT(re, im){ const n = re.length;
+  for(let i = 1, j = 0; i < n; i++){ let b = n >> 1; for(; j & b; b >>= 1) j ^= b; j ^= b; if(i < j){ [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; } }
+  for(let len = 2; len <= n; len <<= 1){ const an = -2*Math.PI/len, wr = Math.cos(an), wi = Math.sin(an);
+    for(let i = 0; i < n; i += len){ let cr = 1, ci = 0; for(let k = 0; k < len/2; k++){ const a = i + k, b = a + len/2, tr = re[b]*cr - im[b]*ci, ti = re[b]*ci + im[b]*cr;
+      re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti; const t = cr*wr - ci*wi; ci = cr*wi + ci*wr; cr = t; } } } }
+function yaAnaliz(buf){
+  const sr = buf.sampleRate, L = buf.length, chs = buf.numberOfChannels, mono = new Float32Array(L);
+  for(let c = 0; c < chs; c++){ const d = buf.getChannelData(c); for(let i = 0; i < L; i++) mono[i] += d[i]/chs; }
+  const N = 1024, F = Math.ceil(L/sr*FPS) + 1, win = new Float32Array(N); for(let i = 0; i < N; i++) win[i] = .5 - .5*Math.cos(2*Math.PI*i/(N - 1));
+  const re = new Float32Array(N), im = new Float32Array(N), rms = new Float32Array(F), lr = new Float32Array(F), sib = new Float32Array(F);
+  const bin = f => Math.min(N/2 - 1, Math.round(f/(sr/N))), B = [bin(150), bin(900), bin(2500), bin(5000), bin(9000)];
+  for(let k = 0; k < F; k++){ const s0 = Math.round(k*sr/FPS) - N/2; let e = 0;
+    for(let i = 0; i < N; i++){ const x = (s0 + i >= 0 && s0 + i < L) ? mono[s0 + i] : 0; e += x*x; re[i] = x*win[i]; im[i] = 0; }
+    rms[k] = Math.sqrt(e/N); yaFFT(re, im); const band = (a, b) => { let t = 0; for(let i = a; i < b; i++) t += re[i]*re[i] + im[i]*im[i]; return t; };
+    const lo = band(B[0], B[1]), mid = band(B[1], B[2]), hi = band(B[2], B[3]), sb = band(B[3], B[4]);
+    lr[k] = Math.log((mid + hi + 1e-9)/(lo + 1e-9)); sib[k] = sb/(lo + mid + hi + sb + 1e-9); }
+  const so = Float32Array.from(rms).sort(), pct = p => so[Math.min(F - 1, Math.floor(p*F))];
+  const peak = Math.max(1e-6, pct(.97)), noise = pct(.1), gate = noise + (peak - noise)*.08, tgt = new Float32Array(F);
+  for(let k = 0; k < F; k++) tgt[k] = Math.pow(Math.min(1, Math.max(0, (rms[k] - gate)/(peak*.85 - gate))), .75);
+  const vo = []; for(let k = 0; k < F; k++) if(tgt[k] > .15) vo.push(lr[k]); vo.sort((a, b) => a - b);
+  const med = vo.length ? vo[vo.length >> 1] : 0, mad = vo.length ? vo.map(x => Math.abs(x - med)).sort((a, b) => a - b)[vo.length >> 1] : 1;
+  const open = new Float32Array(F), wide = new Float32Array(F), brow = new Float32Array(F); let o = 0, w = 0, br = 0, slow = 0, cool = 0;
+  for(let k = 0; k < F; k++){ let to = tgt[k], tw = Math.max(-1, Math.min(1, (lr[k] - med)/(Math.max(mad, .05)*2)));
+    if(sib[k] > .35 && rms[k] > gate*.8){ to = Math.max(to*.5, .18); tw = .7; }
+    o += (to - o)*(to > o ? .7 : .45); w += (tw - w)*.35; slow += (rms[k] - slow)*.05; cool--;
+    if(cool <= 0 && rms[k] > slow*1.7 && rms[k] > peak*.55){ br = 1; cool = 36; } else br *= .9;
+    open[k] = o < .03 ? 0 : o; wide[k] = w; brow[k] = br; }
+  return { open, wide, brow };
+}
 function voiceKey(){
   const f = S.audioFile;
   const vs = $('#kaynak').value === 'video' ? MEDIA.filter(m => m.kind === 'video').map(m => (m.file.name || 'v') + m.file.size).join(',') : '';
@@ -1202,7 +1243,7 @@ async function ensureVoice(){
   say('Ses tonu ayarlanıyor...');
   buf = await pitchShift(buf, pitch());
   const count = m => segs.filter(g => g.mood === m).length;
-  AUD = { key:voiceKey(), buf, segs, vstart, env:envelope(buf), mainMood: count('uzgun') > count('mutlu') ? 'uzgun' : 'mutlu' };
+  AUD = { key:voiceKey(), buf, segs, vstart, env:envelope(buf), ya:yaAnaliz(buf), mainMood: count('uzgun') > count('mutlu') ? 'uzgun' : 'mutlu' };
 }
 $('#btnDinle').onclick = async () => {
   const b = $('#btnDinle'); b.disabled = true;
@@ -1332,7 +1373,8 @@ function director(P){
     const pop = M.saskin*Math.max(0, 1 - segT/.4)*.015;
     const bob = Math.sin(T*1.3*(1 - .4*M.uzgun + .3*M.mutlu))*H*.004 - o*H*.003 + H*.008*M.uzgun + H*.006*nod;
     const rot = (Math.sin(T*.37)*.4 - 1.8*M.dusunceli + Math.sin(T*.9)*.8*M.mutlu + .6*nod)*Math.PI/180;
-    return { T, o, blink:isBlink(T, blinks), bv:blinkV(T, blinks), sub: P.subOn && g ? subChunk(g, t) : '',
+    const yk = t >= 0 && AUD.ya && f < AUD.ya.open.length ? f : -1;
+    return { T, o, yo:yk >= 0 ? AUD.ya.open[yk] : 0, yw:yk >= 0 ? AUD.ya.wide[yk] : 0, yb:yk >= 0 ? AUD.ya.brow[yk] : 0, blink:isBlink(T, blinks), bv:blinkV(T, blinks), sub: P.subOn && g ? subChunk(g, t) : '',
              zoom: P.camOn ? camZoom(Math.max(t, 0), i) : 1, bob, rot, pop, warm:M.mutlu, cool:M.uzgun,
              titleA: P.title ? 1 - ease((T - (P.lead - .9))/.7) : 0, title:P.title,
              black: Math.max(1 - T/.5, (T - (P.D - 1))/1, 0), media: mediaAt(P, T) };
