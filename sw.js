@@ -2,7 +2,7 @@
    Sayfanın kendisi (HTML) her zaman önce internetten alınır: GitHub'a yeni sürüm
    yüklenince telefon onu hemen görür. İnternet yoksa saklanan kopya açılır.
    Diğer dosyalar (ikon, manifest) önce telefondan gelir. */
-const SURUM = 'sahnely-v4';
+const SURUM = 'sahnely-v5';
 
 self.addEventListener('install', e => {
   self.skipWaiting();   // yeni sürüm beklemeden devreye girsin

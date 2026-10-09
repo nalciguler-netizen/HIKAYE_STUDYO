@@ -172,6 +172,7 @@ footer a{color:var(--sun)}
     <option value="720x1280">Dikey 720×1280 (Shorts, hızlı)</option>
   </select>
   <label class="check"><input id="kamera" type="checkbox" checked> Otomatik kamera hareketleri</label>
+  <label class="check"><input id="resimHareket" type="checkbox"> Yüz ağı varken de tüm resmi oynat (kapalı önerilir)</label>
   <label class="check"><input id="altyazi" type="checkbox" checked> Altyazı</label>
   <label class="check"><input id="muzik" type="checkbox"> Hafif fon müziği</label>
 
@@ -733,9 +734,10 @@ function yuzAgi(src, fr){
     if(!RIG) return null;
     const T = fr.T || 0, kz = +($('#agizKazanc') ? $('#agizKazanc').value : 1);
     const o = Math.max(0, fr.yo != null ? fr.yo : (fr.o || 0)), w = fr.yw != null ? fr.yw*Math.min(1, o*2.5) : 0;
-    return rigCiz(RIG, { open:Math.min(S.foto ? 1.1 : 1.4, o*kz), wide:w, blink:fr.bv ?? (fr.blink ? 1 : 0), brow:Math.max(fr.yb || 0, Math.min(1, (fr.pop || 0)/.015)), gaze:yaBakis(T),
-      roll:.012*Math.sin(.7*T) + .007*Math.sin(1.9*T + 1) + .015*Math.min(1, o)*Math.sin(2.6*T), tx:.004*Math.sin(.5*T + 2),
-      ty:.004*Math.sin(.9*T) + .003*Math.sin(2*Math.PI*T/4) });
+    return rigCiz(RIG, { open:Math.min(S.foto ? 1.1 : 1.6, o*kz), wide:w, blink:fr.bv ?? (fr.blink ? 1 : 0), brow:Math.max(fr.yb || 0, Math.min(1, (fr.pop || 0)/.015)), gaze:yaBakis(T),
+      // 14 yaş test videosundaki ayarlar: sadece kafa oynar, resmin geri kalanı sabit kalır
+      roll:.012*Math.sin(.7*T) + .007*Math.sin(1.9*T + 1) + .018*(fr.ys || 0)*Math.sin(2.6*T + .5), tx:.006*Math.sin(.5*T + 2) + .003*Math.sin(1.3*T),
+      ty:.004*Math.sin(.9*T) + .003*Math.sin(2*Math.PI*T/4) + .012*(fr.yb || 0) + .006*(fr.ys || 0)*Math.sin(3.1*T) });
   }catch(e){ console.warn('yüz ağı', e); RIG = null; return null; }
 }
 
@@ -747,7 +749,9 @@ function draw(fr){
   ctx.fillStyle = '#10202b'; ctx.fillRect(0, 0, W, H);
   const useMedia = (LAYOUT === 'ekran' || LAYOUT === 'sadece') && MEDIA.length > 0;
   if(useMedia) drawMediaLayer(media);
-  if(!useMedia && S.ch && zoom > 1.001){
+  const sep0 = LAYOUT === 'karakter' || LAYOUT === 'ekran', kaynak = S.ch && !(LAYOUT === 'sadece' && useMedia) ? ((sep0 && !useMedia && S.chT) || S.ch) : null;
+  const agli = kaynak ? yuzAgi(kaynak, fr) : null, sabit = !!agli && !$('#resimHareket')?.checked;   // yüz ağı varsa resim sabit, sadece kafa oynar
+  if(!useMedia && S.ch && zoom > 1.001 && !sabit){
     const F = pt(facePoint(), rect());
     let cx = lerp(W/2, F.x, .85), cy = lerp(H/2, F.y, .85);
     const hw = W/(2*zoom), hh = H/(2*zoom);
@@ -764,17 +768,16 @@ function draw(fr){
     ctx.fillStyle = '#B9CBD6'; ctx.font = `600 ${H*.045}px Nunito, sans-serif`; ctx.textAlign = 'center';
     ctx.fillText('Karakter görselini seç', W/2, H/2);
   } else {
-    const r = rect(bob, 1 + Math.sin(T*1.8)*.003 + pop);
+    const r = sabit ? rect(0, 1) : rect(bob, 1 + Math.sin(T*1.8)*.003 + pop);
     const px = r.x + r.w/2, py = r.y + r.h, sep = LAYOUT === 'karakter' || LAYOUT === 'ekran';
     ctx.save();
     const pip = LAYOUT === 'ekran' && useMedia;
     if(pip){ const b = pipBox(); ctx.beginPath(); ctx.roundRect(b.x, b.y, b.w, b.h, W*.02); ctx.clip(); }
-    else if(LAYOUT !== 'birlesik'){ ctx.translate(px, py); ctx.rotate(rot); ctx.translate(-px, -py); }
+    else if(LAYOUT !== 'birlesik' && !sabit){ ctx.translate(px, py); ctx.rotate(rot); ctx.translate(-px, -py); }
     if(sep && S.shadow && !useMedia){
       const sx = r.w/S.ch.width, pd = S.shadow.pad*sx;
       ctx.globalAlpha = .38; ctx.drawImage(S.shadow.c, r.x - pd + r.w*.012, r.y - pd + r.h*.006, r.w + pd*2, r.h + pd*2); ctx.globalAlpha = 1;
     }
-    const kaynak = (sep && !useMedia && S.chT) || S.ch, agli = yuzAgi(kaynak, fr);
     ctx.drawImage(agli || kaynak, r.x, r.y, r.w, r.h);
     if(agli && RIG && !running && $('#noktaGoster') && $('#noktaGoster').checked){ ctx.fillStyle = '#F2B544'; const kx = r.w/RIG.cw, ky = r.h/RIG.ch;
       for(let i = 0; i < RIG.nF; i++) ctx.fillRect(r.x + RIG.pos[2*i]*kx - 1.5, r.y + RIG.pos[2*i + 1]*ky - 1.5, 3, 3); }
@@ -1109,13 +1112,13 @@ function yaAnaliz(buf){
   for(let k = 0; k < F; k++) tgt[k] = Math.pow(Math.min(1, Math.max(0, (rms[k] - gate)/(peak*.85 - gate))), .75);
   const vo = []; for(let k = 0; k < F; k++) if(tgt[k] > .15) vo.push(lr[k]); vo.sort((a, b) => a - b);
   const med = vo.length ? vo[vo.length >> 1] : 0, mad = vo.length ? vo.map(x => Math.abs(x - med)).sort((a, b) => a - b)[vo.length >> 1] : 1;
-  const open = new Float32Array(F), wide = new Float32Array(F), brow = new Float32Array(F); let o = 0, w = 0, br = 0, slow = 0, cool = 0;
+  const open = new Float32Array(F), wide = new Float32Array(F), brow = new Float32Array(F), speak = new Float32Array(F); let o = 0, w = 0, br = 0, sp = 0, slow = 0, cool = 0;
   for(let k = 0; k < F; k++){ let to = tgt[k], tw = Math.max(-1, Math.min(1, (lr[k] - med)/(Math.max(mad, .05)*2)));
     if(sib[k] > .35 && rms[k] > gate*.8){ to = Math.max(to*.5, .18); tw = .7; }
     o += (to - o)*(to > o ? .7 : .45); w += (tw - w)*.35; slow += (rms[k] - slow)*.05; cool--;
     if(cool <= 0 && rms[k] > slow*1.7 && rms[k] > peak*.55){ br = 1; cool = 36; } else br *= .9;
-    open[k] = o < .03 ? 0 : o; wide[k] = w; brow[k] = br; }
-  return { open, wide, brow };
+    sp += (o - sp)*.04; open[k] = o < .03 ? 0 : o; wide[k] = w; brow[k] = br; speak[k] = sp; }
+  return { open, wide, brow, speak };
 }
 function voiceKey(){
   const f = S.audioFile;
@@ -1374,7 +1377,7 @@ function director(P){
     const bob = Math.sin(T*1.3*(1 - .4*M.uzgun + .3*M.mutlu))*H*.004 - o*H*.003 + H*.008*M.uzgun + H*.006*nod;
     const rot = (Math.sin(T*.37)*.4 - 1.8*M.dusunceli + Math.sin(T*.9)*.8*M.mutlu + .6*nod)*Math.PI/180;
     const yk = t >= 0 && AUD.ya && f < AUD.ya.open.length ? f : -1;
-    return { T, o, yo:yk >= 0 ? AUD.ya.open[yk] : 0, yw:yk >= 0 ? AUD.ya.wide[yk] : 0, yb:yk >= 0 ? AUD.ya.brow[yk] : 0, blink:isBlink(T, blinks), bv:blinkV(T, blinks), sub: P.subOn && g ? subChunk(g, t) : '',
+    return { T, o, yo:yk >= 0 ? AUD.ya.open[yk] : 0, yw:yk >= 0 ? AUD.ya.wide[yk] : 0, yb:yk >= 0 ? AUD.ya.brow[yk] : 0, ys:yk >= 0 && AUD.ya.speak ? AUD.ya.speak[yk] : 0, blink:isBlink(T, blinks), bv:blinkV(T, blinks), sub: P.subOn && g ? subChunk(g, t) : '',
              zoom: P.camOn ? camZoom(Math.max(t, 0), i) : 1, bob, rot, pop, warm:M.mutlu, cool:M.uzgun,
              titleA: P.title ? 1 - ease((T - (P.lead - .9))/.7) : 0, title:P.title,
              black: Math.max(1 - T/.5, (T - (P.D - 1))/1, 0), media: mediaAt(P, T) };
